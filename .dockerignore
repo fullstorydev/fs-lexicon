@@ -1,0 +1,51 @@
+# Node modules should be installed in the container
+node_modules
+
+# Environment variables should never be included in Docker images
+.env
+.env.*
+*.env
+
+# Test files
+tests/
+test/
+__tests__/
+coverage/
+jest.config.js
+*.test.js
+
+# Git and version control
+.git
+.gitignore
+.github/
+
+# Docker files (to avoid recursive copying)
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Temporary files
+tmp/
+temp/
+
+# Documentation
+README.md
+LICENSE
+docs/
+
+# Other build artifacts
+dist/
+build/
+.DS_Store
