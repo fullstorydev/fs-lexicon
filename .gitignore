@@ -1,0 +1,19 @@
+# dependencies
+/node_modules
+.env
+package-lock.json
+
+# Test reports
+/tests/test-report.xml
+/tests/junit.xml
+/test-report.xml
+/jest-reports/
+/coverage/
+*.junit.xml
+junit.xml
+
+# IDE files
+.vscode/
+.idea/
+*.iml
+.DS_Store

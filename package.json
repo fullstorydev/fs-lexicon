@@ -1,0 +1,63 @@
+{
+    "name": "lexicon",
+    "version": "1.0.0",
+    "description": "A Fullstory middleware intended to receive, transform and route behavioural activation instructions.",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "test": "jest --config ./tests/jest.config.js",
+        "test:ci": "jest --config ./tests/jest.config.js --ci --coverage",
+        "test:watch": "jest --config ./tests/jest.config.js --watch",
+        "test:coverage": "jest --config ./tests/jest.config.js --coverage",
+        "test:unit": "jest --config ./tests/jest.config.js --testPathPattern=tests/unit",
+        "test:integration": "jest --config ./tests/jest.config.js --testPathPattern=tests/integration",
+        "test:clean": "rm -rf ./coverage",
+        "test:update-snapshots": "jest --config ./tests/jest.config.js --updateSnapshot",
+        "test:webhook": "jest --config ./tests/jest.config.js --testPathPattern=tests/unit/webhookRouter.test.js",
+        "test:webhook:base": "jest --config ./tests/jest.config.js --testPathPattern=tests/unit/webhookBase.test.js",
+        "test:connector:base": "jest --config ./tests/jest.config.js --testPathPattern=tests/unit/connectorBase.test.js",
+        "test:webhook:integration": "jest --config ./tests/jest.config.js --testPathPattern=tests/integration/webhook.integration.test.js",
+        "test:changed": "jest --config ./tests/jest.config.js --onlyChanged",
+        "test:verbose": "jest --config ./tests/jest.config.js --verbose",
+        "verify": "node ./scripts/verify-installation.js",
+        "docker:build": "docker build -t lexicon:$(node -p \"require('./package.json').version\") -t lexicon:latest --build-arg VERSION=$(node -p \"require('./package.json').version\") .",
+        "docker:build:dev": "docker build -t lexicon:dev-$(node -p \"require('./package.json').version\") -t lexicon:dev --build-arg VERSION=$(node -p \"require('./package.json').version\") --build-arg NODE_ENV=development --build-arg SKIP_TESTS=true --build-arg K_SERVICE=local-dev --target builder .",
+        "docker:run": "docker run -p 8080:8080 -e NODE_ENV=production lexicon:${TAG:-$(node -p \"require('./package.json').version\")}",
+        "docker:run:env": "docker run -p 8080:8080 --env-file .env lexicon:${TAG:-$(node -p \"require('./package.json').version\")}",
+        "docker:run:gcp": "docker run -p 8080:8080 --env-file .env -e CLOUD_PROVIDER=GCP -e K_SERVICE=local-gcp lexicon:${TAG:-$(node -p \"require('./package.json').version\")}",
+        "docker:run:azure": "docker run -p 8080:8080 --env-file .env -e CLOUD_PROVIDER=AZURE -e WEBSITE_SITE_NAME=local-azure lexicon:${TAG:-$(node -p \"require('./package.json').version\")}",
+        "docker:run:aws": "docker run -p 8080:8080 --env-file .env -e CLOUD_PROVIDER=AWS -e AWS_EXECUTION_ENV=local-aws lexicon:${TAG:-$(node -p \"require('./package.json').version\")}",
+        "docker:stop": "docker ps -q --filter ancestor=lexicon:dev | xargs -r docker stop",
+        "docker:stop:all": "docker ps -q --filter name=lexicon | xargs -r docker stop",
+        "docker:ps": "docker ps",
+        "docker:kill:port": "docker ps -q --filter publish=8080 | xargs -r docker stop",
+        "dev:gcf": "npx @google-cloud/functions-framework --target=lexicon",
+        "dev:docker": "npm run docker:build:dev && npm run docker:run:env",
+        "dev:mount": "docker run --name lexicon-dev -p 8080:8080 --env-file .env -e K_SERVICE=local-dev -v ${PWD}:/usr/src/app -v /usr/src/app/node_modules lexicon:dev",
+        "dev:clean": "docker build -t lexicon:dev-$(node -p \"require('./package.json').version\") -t lexicon:dev --build-arg VERSION=$(node -p \"require('./package.json').version\") --build-arg NODE_ENV=development --build-arg SKIP_TESTS=true --build-arg K_SERVICE=local-dev --no-cache --target builder . && npm run docker:run:env"
+    },
+    "dependencies": {
+        "@azure/functions": "^3.5.0",
+        "@google-cloud/bigquery": "^7.9.3",
+        "@google-cloud/functions-framework": "^3.1.0",
+        "date-fns": "^2.30.0",
+        "dotenv": "^16.0.3",
+        "express": "^4.18.2",
+        "googleapis": "^144.0.0",
+        "node-fetch": "^2.6.9",
+        "snowflake-sdk": "^2.0.3"
+    },
+    "devDependencies": {
+        "babel-jest": "^29.5.0",
+        "cross-env": "^7.0.3",
+        "jest": "^29.5.0",
+        "jest-junit": "^16.0.0",
+        "jest-sonar-reporter": "^2.0.0",
+        "supertest": "^6.3.3"
+    },
+    "engines": {
+        "node": ">=14"
+    },
+    "author": "fullstory",
+    "license": "MIT"
+}
