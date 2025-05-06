@@ -266,7 +266,7 @@ Lexicon implements a controlled, phased initialization process that prevents cir
                            ▼
 ┌──────────────────────────────────────────────────┐
 │          Phase 3: External Integrations          │
-│           fullstory, slack, atlassian           │
+│           fullstory, slack, atlassian            │
 └──────────────────────────┬───────────────────────┘
                            │
                            ▼
@@ -439,9 +439,9 @@ Lexicon follows a layered configuration architecture to ensure consistency and v
      ┌────────┼────────┬───────────┐
      │        │        │           │
      ▼        ▼        ▼           ▼
-┌─────────┐ ┌─────┐ ┌────────┐ ┌────────┐
-│Snowflake│ │Slack│ │Fullstory│ │  ...   │
-└─────────┘ └─────┘ └────────┘ └────────┘
+┌─────────┐ ┌─────┐ ┌────────-┐ ┌────────┐
+│Snowflake│ │Slack│ │Fullstory│ │  Other │
+└─────────┘ └─────┘ └────────-┘ └────────┘
 ```
 
 **Key Components:**
@@ -615,4 +615,4 @@ When adding new functionality to Lexicon, follow these guidelines:
 
 ## 📄 License
 
-This project is licensed under the ISC License - see the LICENSE file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
