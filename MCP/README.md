@@ -244,5 +244,3 @@ If you attempt to use a restricted tool in SAFE_MODE, the server will return an 
 MIT License - see LICENSE file for details.
 
 ---
-
-**Built with ❤️ using the Model Context Protocol**
