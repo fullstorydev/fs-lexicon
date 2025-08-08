@@ -1,0 +1,17 @@
+# Cloud Build configuration for Lexicon MCP Server
+# Replace the placeholders with your actual values:
+# - YOUR_REGION: Your preferred Google Cloud region (e.g., us-central1, europe-west1)
+# - YOUR_PROJECT_ID: Your Google Cloud project ID
+# - YOUR_REPOSITORY: Your Artifact Registry repository name
+
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: 
+  - 'build'
+  - '-f'
+  - 'MCP/Dockerfile.mcp'
+  - '-t'
+  - 'YOUR_REGION-docker.pkg.dev/YOUR_PROJECT_ID/YOUR_REPOSITORY/lexicon-mcp'
+  - '.'
+images:
+- 'YOUR_REGION-docker.pkg.dev/YOUR_PROJECT_ID/YOUR_REPOSITORY/lexicon-mcp'

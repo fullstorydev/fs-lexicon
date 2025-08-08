@@ -2,7 +2,7 @@
  * Initialization - Centralized component initialization and logging
  * Provides consistent startup logging across all components
  */
-const { Logger } = require('./loggerFramework');
+import { Logger } from './loggerFramework.js';
 
 class Initialization {
   constructor() {
@@ -317,4 +317,4 @@ class Initialization {
 const initialization = new Initialization();
 
 // Export the singleton
-module.exports = initialization;
+export default initialization;

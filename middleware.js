@@ -1,11 +1,11 @@
 /**
  * Middleware - Express middleware functions for request processing and validation
  */
-const crypto = require('crypto');
-const config = require('./config');
-const { Logger } = require('./loggerFramework');
-const { ErrorHandler } = require('./errorHandler');
-const serviceRegistry = require('./serviceRegistry');
+import crypto from 'crypto';
+import config from './config.js';
+import { Logger } from './loggerFramework.js';
+import { ErrorHandler } from './errorHandler.js';
+import serviceRegistry from './serviceRegistry.js';
 
 /**
  * Middleware class with various request handlers
@@ -29,12 +29,24 @@ class MiddlewareService {
 
   /**
    * Verify Fullstory webhook signature
+   * SECURITY WARNING: This method validates webhook authenticity. 
+   * Only disable verification in explicit development environments.
    * @param {Object} req - Express request object
    * @param {Object} res - Express response object
    * @param {Function} next - Express next function
    */
   verifyWebHook(req, res, next) {
     try {
+      // Skip signature verification ONLY if explicitly enabled for development
+      // This is a security-critical check - only bypass in explicitly configured dev environments
+      const isDevelopment = process.env.NODE_ENV === 'development' || 
+                           process.env.SKIP_WEBHOOK_VERIFICATION === 'true';
+      
+      if (isDevelopment) {
+        this.logger.warn('SECURITY: Skipping webhook signature verification in development mode');
+        return next();
+      }
+
       // Check if signature header exists
       const signature = req.headers["fullstory-signature"];
       if (!signature) {
@@ -195,17 +207,19 @@ try {
   logger.error('Failed to register middleware with initialization tracker', error);
 }
 
-// Register middleware in the service registry
+// Export middleware methods with proper binding to the instance
+const middlewareExports = {
+  verifyWebHook: middleware.verifyWebHook.bind(middleware),
+  validateJsonFields: (requiredFields) => middleware.validateJsonFields(requiredFields),
+  logRequest: middleware.logRequest.bind(middleware)
+};
+
+// Register the bound exports in the service registry (not the raw instance)
 try {
-  serviceRegistry.register('middleware', middleware);
+  serviceRegistry.register('middleware', middlewareExports);
 } catch (error) {
   const logger = new Logger('Middleware');
   logger.warn('Failed to register middleware in service registry', error);
 }
 
-// Export middleware methods with proper binding to the instance
-module.exports = {
-  verifyWebHook: (req, res, next) => middleware.verifyWebHook(req, res, next),
-  validateJsonFields: (requiredFields) => middleware.validateJsonFields(requiredFields),
-  logRequest: (req, res, next) => middleware.logRequest(req, res, next)
-};
+export default middlewareExports;

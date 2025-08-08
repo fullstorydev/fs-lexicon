@@ -1,9 +1,20 @@
 /**
- * Jest configuration for Lexicon test suite
+ * Jest configuration for Lexicon test suite (ES Modules)
  */
-module.exports = {
+export default {
   // Set the test environment (node for server-side code)
   testEnvironment: 'node',
+  
+  // Enable ES modules support
+  preset: null,
+  globals: {
+    'ts-jest': {
+      useESM: true
+    }
+  },
+  
+  // Transform configuration (no transforms for ESM)
+  transform: {},
   
   // Set the root directory for tests
   rootDir: '../',

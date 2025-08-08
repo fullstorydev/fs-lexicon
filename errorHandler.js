@@ -2,7 +2,7 @@
  * ErrorHandler - Centralized error handling utility
  */
 // Import ERROR_TYPES from loggerFramework to avoid duplicate definitions
-const { ERROR_TYPES, Logger } = require('./loggerFramework');
+import { ERROR_TYPES, Logger } from './loggerFramework.js';
 
 class ErrorHandler {
   /**
@@ -131,7 +131,8 @@ function createErrorHandler(context) {
   return new ErrorHandler(context);
 }
 
-module.exports = {
+export {
   ErrorHandler,
-  createErrorHandler
+  createErrorHandler,
+  ERROR_TYPES
 };

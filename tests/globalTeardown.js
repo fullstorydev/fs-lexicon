@@ -4,7 +4,7 @@
  * This file runs once after all tests complete
  */
 
-module.exports = async () => {
+export default async () => {
   // Clean up any resources that were created during testing
   console.log('\nCleaning up test environment...');
   

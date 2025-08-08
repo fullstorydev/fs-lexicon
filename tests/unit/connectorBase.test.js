@@ -2,59 +2,63 @@
  * Unit tests for ConnectorBase class
  */
 
-// Initialize all mock functions before imports
+// Mock modules for ESM
 const mockRegisterComponent = jest.fn();
-const mockRegisterConnector = jest.fn();
+const mockRegisterConnector = jest.fn(); 
 const mockMarkInitialized = jest.fn();
 const mockMarkFailed = jest.fn();
 
-// Mock initialization module first to avoid reference errors
-jest.mock('../../initialization', () => ({
-  registerComponent: mockRegisterComponent,
-  registerConnector: mockRegisterConnector,
-  markInitialized: mockMarkInitialized,
-  markFailed: mockMarkFailed
+jest.mock('../../initialization.js', () => ({
+  default: {
+    registerComponent: mockRegisterComponent,
+    registerConnector: mockRegisterConnector,
+    markInitialized: mockMarkInitialized,
+    markFailed: mockMarkFailed
+  }
 }));
 
-// Mock service registry to use the initialization module
-jest.mock('../../serviceRegistry', () => ({
-  get: jest.fn().mockImplementation(() => require('../../initialization')),
-  has: jest.fn().mockReturnValue(true),
-  register: jest.fn()
+jest.mock('../../serviceRegistry.js', () => ({
+  default: {
+    get: jest.fn().mockImplementation(() => ({
+      registerComponent: mockRegisterComponent,
+      registerConnector: mockRegisterConnector,
+      markInitialized: mockMarkInitialized,
+      markFailed: mockMarkFailed
+    })),
+    has: jest.fn().mockReturnValue(true),
+    register: jest.fn()
+  }
 }));
 
-// Mock other dependencies
-jest.mock('../../loggerFramework', () => ({
+jest.mock('../../loggerFramework.js', () => ({
   Logger: jest.fn().mockImplementation(() => ({
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
     debug: jest.fn(),
-    refreshLogLevel: jest.fn().mockReturnValue(3) // Add missing refreshLogLevel method
+    refreshLogLevel: jest.fn().mockReturnValue(3)
   }))
 }));
 
-jest.mock('../../errorHandler', () => ({
+jest.mock('../../errorHandler.js', () => ({
   createErrorHandler: jest.fn().mockImplementation(() => ({
     handleError: jest.fn(),
     logError: jest.fn()
   }))
 }));
 
-jest.mock('../../connectorConfigValidator', () => 
-  jest.fn().mockImplementation(() => ({
+jest.mock('../../connectorConfigValidator.js', () => ({
+  default: jest.fn().mockImplementation(() => ({
     validateConnection: jest.fn(),
-    validateConfig: jest.fn()
+    validateConfig: jest.fn(),
+    checkIsConfigured: jest.fn().mockReturnValue(true)
   }))
-);
+}));
 
-// Now import the modules after all mocks are set up
-const ConnectorBase = require('../../connectorBase');
-const { Logger } = require('../../loggerFramework');
-const errorHandler = require('../../errorHandler');
-const ConnectorConfigValidator = require('../../connectorConfigValidator');
-const serviceRegistry = require('../../serviceRegistry');
-const initialization = require('../../initialization');
+import ConnectorBase from '../../connectorBase.js';
+import { Logger } from '../../loggerFramework.js';
+import { createErrorHandler } from '../../errorHandler.js';
+import ConnectorConfigValidator from '../../connectorConfigValidator.js';
 
 describe('ConnectorBase', () => {
   let connector;
@@ -68,7 +72,7 @@ describe('ConnectorBase', () => {
     it('should initialize with the provided name', () => {
       expect(connector.name).toBe('TestConnector');
       expect(Logger).toHaveBeenCalledWith('Connector:TestConnector');
-      expect(errorHandler.createErrorHandler).toHaveBeenCalledWith('Connector:TestConnector');
+      expect(createErrorHandler).toHaveBeenCalledWith('Connector:TestConnector');
       expect(ConnectorConfigValidator).toHaveBeenCalledWith('TestConnector', expect.anything());
       expect(connector.initialized).toBe(false);
       expect(mockRegisterComponent).toHaveBeenCalledWith('TestConnector');

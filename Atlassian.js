@@ -2,9 +2,9 @@
  * Atlassian integration connector for Lexicon
  * Handles interactions with Jira
  */
-const fetch = require('node-fetch');
-const ConnectorBase = require('./connectorBase');
-const serviceRegistry = require('./serviceRegistry');
+import fetch from 'node-fetch';
+import ConnectorBase from './connectorBase.js';
+import serviceRegistry from './serviceRegistry.js';
 
 class AtlassianConnector extends ConnectorBase {
     constructor() {
@@ -190,6 +190,5 @@ atlassianConnector.initialize()
 serviceRegistry.register('atlassian', atlassianConnector);
 
 // Export the connector
-module.exports = {
-  jira: atlassianConnector
-};
+export default { jira: atlassianConnector };
+export { atlassianConnector as jira };

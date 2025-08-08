@@ -2,8 +2,8 @@
  * Startup - Manages the initialization sequence for Lexicon
  * Ensures services are started in the correct order to prevent circular dependencies
  */
-const { Logger } = require('./loggerFramework');
-const serviceRegistry = require('./serviceRegistry');
+import { Logger } from './loggerFramework.js';
+import serviceRegistry from './serviceRegistry.js';
 
 // Initialize logger
 const logger = new Logger('Startup');
@@ -90,8 +90,8 @@ class Startup {
   async _registerCoreServices() {
     try {
       // Import services - order matters here
-      const config = require('./config');
-      const initialization = require('./initialization');
+      const config = (await import('./config.js')).default;
+      const initialization = (await import('./initialization.js')).default;
       
       // Register in service registry
       serviceRegistry.register('config', config);
@@ -123,18 +123,18 @@ class Startup {
           case 'middleware':
             // Must be initialized differently since the middleware service 
             // doesn't export itself as a proper service (it exports methods)
-            this._initializeMiddleware();
+            await this._initializeMiddleware();
             break;
             
           case 'konbini':
             // Konbini already initializes itself when required, just need to register it
-            const konbini = require('./konbini');
+            const konbini = (await import('./konbini.js')).default;
             serviceRegistry.register('konbini', konbini);
             break;
             
           case 'webhookRouter':
             // Webhook router needs special handling
-            this._initializeWebhookRouter();
+            await this._initializeWebhookRouter();
             break;
             
           case 'cloudAdapter':
@@ -157,10 +157,10 @@ class Startup {
    * Initialize middleware service
    * @private
    */
-  _initializeMiddleware() {
+  async _initializeMiddleware() {
     try {
       // Middleware already registers itself with the registry
-      require('./middleware');
+      await import('./middleware.js');
       logger.debug('Middleware service initialized');
     } catch (error) {
       logger.error('Failed to initialize middleware:', error);
@@ -171,9 +171,9 @@ class Startup {
    * Initialize webhook router
    * @private
    */
-  _initializeWebhookRouter() {
+  async _initializeWebhookRouter() {
     try {
-      const webhookRouter = require('./webhookRouter');
+      const webhookRouter = (await import('./webhookRouter.js')).default;
       serviceRegistry.register('webhookRouter', webhookRouter);
       logger.debug('Webhook router initialized');
     } catch (error) {
@@ -239,4 +239,4 @@ class Startup {
 // Create singleton instance
 const startupManager = new Startup();
 
-module.exports = startupManager;
+export default startupManager;

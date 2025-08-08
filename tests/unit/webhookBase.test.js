@@ -8,16 +8,25 @@ const mockMarkInitialized = jest.fn();
 const mockMarkFailed = jest.fn();
 const mockExtractRoutes = jest.fn().mockReturnValue(['GET /test']);
 
-jest.mock('../../initialization', () => ({
-  registerComponent: mockRegisterComponent,
-  markInitialized: mockMarkInitialized,
-  markFailed: mockMarkFailed,
-  extractRoutes: mockExtractRoutes
+jest.mock('../../initialization.js', () => ({
+  default: {
+    registerComponent: mockRegisterComponent,
+    markInitialized: mockMarkInitialized,
+    markFailed: mockMarkFailed,
+    extractRoutes: mockExtractRoutes
+  }
 }));
 
-jest.mock('../../serviceRegistry', () => ({
-  get: jest.fn().mockImplementation(() => require('../../initialization')),
-  has: jest.fn().mockReturnValue(true)
+jest.mock('../../serviceRegistry.js', () => ({
+  default: {
+    get: jest.fn().mockImplementation(() => ({
+      registerComponent: mockRegisterComponent,
+      markInitialized: mockMarkInitialized,
+      markFailed: mockMarkFailed,
+      extractRoutes: mockExtractRoutes
+    })),
+    has: jest.fn().mockReturnValue(true)
+  }
 }));
 
 // Mock the date-fns format function
@@ -26,7 +35,7 @@ jest.mock('date-fns', () => ({
 }));
 
 // Mock other dependencies
-jest.mock('../../loggerFramework', () => ({
+jest.mock('../../loggerFramework.js', () => ({
   Logger: jest.fn().mockImplementation(() => ({
     info: jest.fn(),
     warn: jest.fn(),
@@ -35,18 +44,16 @@ jest.mock('../../loggerFramework', () => ({
   }))
 }));
 
-jest.mock('../../errorHandler', () => ({
-  ErrorHandler: jest.fn().mockImplementation(() => ({
+jest.mock('../../errorHandler.js', () => ({
+  createErrorHandler: jest.fn().mockImplementation(() => ({
     handleError: jest.fn()
   }))
 }));
 
 // Now import modules after all mocks are set up
-const WebhookBase = require('../../webhookBase');
-const { Logger } = require('../../loggerFramework');
-const { ErrorHandler } = require('../../errorHandler');
-const serviceRegistry = require('../../serviceRegistry');
-const initialization = require('../../initialization');
+import WebhookBase from '../../webhookBase.js';
+import { Logger } from '../../loggerFramework.js';
+import { createErrorHandler } from '../../errorHandler.js';
 
 describe('WebhookBase', () => {
   let webhook;

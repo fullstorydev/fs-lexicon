@@ -2,8 +2,8 @@
  * Configuration management for Lexicon
  * Handles environment variables, validation and provides typed access
  */
-require('dotenv').config();
-const { Logger } = require('./loggerFramework');
+import 'dotenv/config';
+import { Logger } from './loggerFramework.js';
 
 class Configuration {
   constructor() {
@@ -70,8 +70,8 @@ class Configuration {
       
       // Google Cloud Configuration
       google_project_id: process.env.GOOGLE_PROJECT_ID,
-      google_workspace_keyfile: process.env.CARGO_DEMO_GOOGLE_WORKSPACE_KEY_FILE,
-      google_sheets_id: process.env.CARGO_DEMO_GOOGLE_WORKSPACE_SHEET_ID,
+      google_workspace_keyfile: process.env.GOOGLE_WORKSPACE_KEY_FILE,
+      google_sheets_id: process.env.GOOGLE_WORKSPACE_SHEET_ID,
       google_sheets_range: process.env.GOOGLE_SHEETS_RANGE || 'Sheet1',
       bigquery_keyfile: process.env.BIGQUERY_KEYFILE
     };
@@ -94,18 +94,21 @@ class Configuration {
       case 'production':
         return {
           log_level: 'info',
-          enable_detailed_errors: false
+          enable_detailed_errors: false,
+          skip_webhook_verification: false
         };
       case 'staging':
         return {
           log_level: 'debug',
-          enable_detailed_errors: true
+          enable_detailed_errors: true,
+          skip_webhook_verification: false
         };
       case 'development':
       default:
         return {
           log_level: 'debug',
-          enable_detailed_errors: true
+          enable_detailed_errors: true,
+          skip_webhook_verification: process.env.SKIP_WEBHOOK_VERIFICATION === 'true'
         };
     }
   }
@@ -386,7 +389,7 @@ const configuration = new Configuration();
 
 // Export the singleton instance right away
 // This avoids circular dependencies when initialization imports this module
-module.exports = configuration;
+export default configuration;
 
 // Register with initialization tracker only after export
 // We'll defer this to be initialized in index.js where we set up the serviceRegistry

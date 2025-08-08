@@ -2,22 +2,21 @@
  * WebhookRouter - Express router for handling various webhook endpoints
  * Routes incoming webhook data to appropriate services
  */
-const express = require('express');
-const { format } = require('date-fns');
-const config = require('./config');
-const { Logger } = require('./loggerFramework');
-const { ErrorHandler, ERROR_TYPES } = require('./errorHandler');
-const { LOG_LEVELS } = require('./loggerFramework');
-const WebhookBase = require('./webhookBase');
+import express from 'express';
+import { format } from 'date-fns';
+import config from './config.js';
+import { Logger, LOG_LEVELS } from './loggerFramework.js';
+import { ErrorHandler, ERROR_TYPES } from './errorHandler.js';
+import WebhookBase from './webhookBase.js';
 
 // Import connector modules 
-const slack = require('./Slack');
-const googleCloud = require('./GoogleCloud');
-const atlassian = require('./Atlassian');
-const Fullstory = require('./Fullstory');
-const snowflake = require('./Snowflake');
-const konbini = require('./konbini');
-const middleware = require('./middleware');
+import slack from './Slack.js';
+import googleCloud from './GoogleCloud.js';
+import atlassian from './Atlassian.js';
+import Fullstory from './Fullstory.js';
+import snowflake from './Snowflake.js';
+import konbini from './konbini.js';
+import middleware from './middleware.js';
 
 /**
  * WebhookRouter class for organizing webhook endpoint handlers
@@ -785,7 +784,7 @@ class WebhookRouter extends WebhookBase {
 const webhookRouterInstance = new WebhookRouter();
 
 // Register with initialization tracker
-const initialization = require('./initialization');
+import initialization from './initialization.js';
 
 try {
   // Use the router instance directly to automatically detect routes
@@ -795,4 +794,4 @@ try {
 }
 
 // Export the router instance
-module.exports = webhookRouterInstance.getRouter();
+export default webhookRouterInstance.getRouter();

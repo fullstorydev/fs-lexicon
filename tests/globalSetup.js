@@ -4,7 +4,7 @@
  * This file runs once before all tests start
  */
 
-module.exports = async () => {
+export default async () => {
   // Set up process-wide test environment variables
   process.env.TESTING = 'true';
   

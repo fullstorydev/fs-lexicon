@@ -2,7 +2,7 @@
  * Service Registry - Centralized management of shared services
  * Provides dependency injection for the Lexicon application
  */
-const { Logger } = require('./loggerFramework');
+import { Logger } from './loggerFramework.js';
 
 // Create a logger for the registry
 const logger = new Logger('ServiceRegistry');
@@ -85,4 +85,4 @@ class ServiceRegistry {
 // Create a singleton instance
 const registry = new ServiceRegistry();
 
-module.exports = registry;
+export default registry;

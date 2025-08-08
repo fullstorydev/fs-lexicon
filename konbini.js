@@ -2,8 +2,8 @@
  * Konbini - A lightweight utilities library for Lexicon
  * Provides database abstractions and formatting utilities
  */
-const { Logger } = require('./loggerFramework');
-const serviceRegistry = require('./serviceRegistry');
+import { Logger } from './loggerFramework.js';
+import serviceRegistry from './serviceRegistry.js';
 
 // Initialize logger
 const logger = new Logger('Konbini');
@@ -16,8 +16,9 @@ class Konbini {
     // Initialize components
     this.warehouse = new Warehouse();
     this.eventFormatter = new EventFormatter();
+    this.quickQueries = new QuickQueries();
     
-    logger.debug('Konbini initialized with Warehouse and EventFormatter');
+    logger.debug('Konbini initialized with Warehouse, EventFormatter, and QuickQueries');
   }
 }
 
@@ -129,6 +130,17 @@ class Warehouse {
   }
   
   /**
+   * Get a database adapter for the specified type (public interface)
+   * @param {Object} options - Options object with databaseType
+   * @param {string} options.databaseType - Type of database
+   * @returns {DatabaseAdapter} Database adapter
+   * @throws {Error} If database type is not supported
+   */
+  getAdapter({ databaseType }) {
+    return this._getAdapter(databaseType);
+  }
+
+  /**
    * Get a database adapter for the specified type
    * @param {string} databaseType - Type of database
    * @returns {DatabaseAdapter} Database adapter
@@ -149,6 +161,435 @@ class Warehouse {
       default:
         throw new Error(`Unsupported database type: ${databaseType}. Supported types are: bigquery, snowflake, redshift`);
     }
+  }
+
+  /**
+   * Helper to parse and map incoming parameters to fully qualified names
+   * Supports BigQuery, Snowflake, and Redshift
+   */
+  _parseFQName({ platform, projectId, dataset, table, database, schema, target }) {
+    platform = platform?.toLowerCase();
+    let fqTable = null;
+    let fqDataset = null;
+    let fqSchema = null;
+    // BigQuery
+    if (platform === 'bigquery') {
+      // Validate projectId
+      if (projectId && !/^[a-z][a-z0-9\-]{5,62}$/.test(projectId)) {
+        throw new Error(`Invalid BigQuery projectId: ${projectId}`);
+      }
+      if (projectId && dataset && table) {
+        fqTable = `${projectId}.${dataset}.${table}`;
+      } else if (target && target.split('.').length === 3) {
+        fqTable = target;
+      } else if (table && dataset && projectId) {
+        fqTable = `${projectId}.${dataset}.${table}`;
+      } else if (table && dataset) {
+        fqTable = `${dataset}.${table}`;
+      } else if (target && target.split('.').length === 2) {
+        fqDataset = target;
+      }
+    }
+    // Snowflake
+    else if (platform === 'snowflake') {
+      if (database && schema && table) {
+        fqTable = `${database}.${schema}.${table}`;
+      } else if (target && target.split('.').length === 3) {
+        fqTable = target;
+      } else if (database && schema) {
+        fqSchema = `${database}.${schema}`;
+      } else if (target && target.split('.').length === 2) {
+        fqSchema = target;
+      }
+    }
+    // Redshift
+    else if (platform === 'redshift') {
+      if (schema && table) {
+        fqTable = `${schema}.${table}`;
+      } else if (target && target.split('.').length === 2) {
+        fqTable = target;
+      } else if (database && schema) {
+        fqSchema = `${database}.${schema}`;
+      } else if (target && target.split('.').length === 2) {
+        fqSchema = target;
+      }
+    }
+    return { fqTable, fqDataset, fqSchema };
+  }
+
+  /**
+   * Generate SQL for common warehouse operations
+   * @param {Object} options - Query options
+   * @param {string} options.queryType - Type of query (list_databases, list_tables, etc.)
+   * @param {string} options.platform - Database platform (bigquery, snowflake, redshift)
+   * @param {string} [options.target] - Target object (database, schema, or table name)
+   * @param {number} [options.limit] - Result limit
+   * @param {string} [options.pattern] - Pattern for filtering results
+   * @returns {Object} Generated SQL query and parameters
+   * @throws {Error} If query type or platform is not supported
+   */
+  generateQuery({ queryType, platform, target, limit = 50, pattern, projectId, dataset, table, database, schema }) {
+    const normalizedPlatform = platform.toLowerCase();
+    const normalizedQueryType = queryType.toLowerCase();
+    this.logger.debug('Generating quick query', {
+      queryType: normalizedQueryType,
+      platform: normalizedPlatform,
+      target,
+      limit
+    });
+    if (!['bigquery', 'snowflake', 'redshift'].includes(normalizedPlatform)) {
+      throw new Error(`Unsupported platform: ${platform}. Supported: bigquery, snowflake, redshift`);
+    }
+    // Use helper to parse FQ names
+    const { fqTable, fqDataset, fqSchema } = this._parseFQName({ platform: normalizedPlatform, projectId, dataset, table, database, schema, target });
+    switch (normalizedPlatform) {
+      case 'bigquery':
+        return this._generateBigQuerySQL(normalizedQueryType, fqTable, limit, pattern, projectId, dataset, table, fqDataset);
+      case 'snowflake':
+        return this._generateSnowflakeSQL(normalizedQueryType, fqTable, limit, pattern, database, schema, table, fqSchema);
+      case 'redshift':
+        return this._generateRedshiftSQL(normalizedQueryType, fqTable, limit, pattern, database, schema, table, fqSchema);
+      default:
+        throw new Error(`Platform ${platform} not implemented`);
+    }
+  }
+
+  /**
+   * Generate BigQuery-specific SQL queries
+   * @private
+   */
+  _generateBigQuerySQL(queryType, fqTable, limit, pattern, projectId, dataset, table, fqDataset) {
+    const params = {};
+    let sql;
+    switch (queryType) {
+      case 'list_databases':
+        sql = `
+          SELECT 
+            catalog_name as database_name,
+            creation_time
+          FROM \`INFORMATION_SCHEMA.SCHEMATA_OPTIONS\`
+          WHERE schema_name = 'information_schema'
+          GROUP BY catalog_name, creation_time
+          ORDER BY catalog_name
+          LIMIT ${limit}
+        `;
+        break;
+
+      case 'list_schemas':
+        sql = `
+          SELECT 
+            catalog_name as database_name,
+            schema_name,
+            creation_time,
+            location
+          FROM \`INFORMATION_SCHEMA.SCHEMATA\`
+          WHERE schema_name != 'INFORMATION_SCHEMA'
+        `;
+        if (fqDataset) {
+          sql += ` AND catalog_name = @database`;
+          params.database = fqDataset;
+        }
+        if (pattern) {
+          sql += ` AND schema_name LIKE @pattern`;
+          params.pattern = pattern;
+        }
+        sql += ` ORDER BY schema_name LIMIT ${limit}`;
+        break;
+
+      case 'list_tables':
+        if (!fqDataset) {
+          throw new Error('Target dataset required for BigQuery list_tables query');
+        }
+        const [projectId2, datasetId2] = fqDataset.split('.');
+        sql = `
+          SELECT 
+            table_catalog as database_name,
+            table_schema as schema_name,
+            table_name,
+            table_type,
+            creation_time
+          FROM \`${projectId2}.${datasetId2}.INFORMATION_SCHEMA.TABLES\`
+          WHERE 1=1
+        `;
+        if (pattern) {
+          sql += ` AND table_name LIKE @pattern`;
+          params.pattern = pattern;
+        }
+        sql += ` ORDER BY table_name LIMIT ${limit}`;
+        break;
+
+      case 'table_count':
+        if (!fqTable) throw new Error('Target table required for table_count query');
+        sql = `SELECT COUNT(*) as row_count FROM \`${fqTable}\``;
+        break;
+
+      case 'table_size':
+        if (!fqTable) throw new Error('Target table required for table_size query');
+        const [proj, dataset3, table3] = fqTable.split('.');
+        sql = `
+          SELECT 
+            table_catalog,
+            table_schema,
+            table_name,
+            row_count,
+            size_bytes,
+            size_bytes / (1024*1024*1024) as size_gb
+          FROM \`${proj}.${dataset}.__TABLES__\`
+          WHERE table_id = '${table}'
+        `;
+        break;
+
+      case 'recent_tables':
+        sql = `
+          SELECT 
+            table_catalog,
+            table_schema,
+            table_name,
+            creation_time,
+            last_modified_time
+          FROM \`INFORMATION_SCHEMA.TABLES\`
+          WHERE table_schema != 'INFORMATION_SCHEMA'
+          ORDER BY last_modified_time DESC 
+          LIMIT ${limit}
+        `;
+        break;
+
+      case 'table_columns':
+        if (!fqTable) throw new Error('Target table required for table_columns query');
+        const [p, d, t] = fqTable.split('.');
+        sql = `
+          SELECT 
+            column_name,
+            data_type,
+            is_nullable,
+            column_default,
+            ordinal_position
+          FROM \`${p}.${d}.INFORMATION_SCHEMA.COLUMNS\`
+          WHERE table_name = '${t}'
+          ORDER BY ordinal_position
+        `;
+        break;
+
+      default:
+        throw new Error(`Unsupported BigQuery query type: ${queryType}`);
+    }
+    return { sql, params };
+  }
+
+  /**
+   * Generate Snowflake-specific SQL queries
+   * @private
+   * Accepts database, schema, table params and assembles fully qualified target if provided.
+   */
+  _generateSnowflakeSQL(queryType, fqTable, limit, pattern, database, schema, table, fqSchema) {
+    const params = {};
+    let sql;
+
+    switch (queryType) {
+      case 'list_databases':
+        sql = 'SHOW DATABASES';
+        if (pattern) sql += ` LIKE '${pattern}'`;
+        break;
+
+      case 'list_schemas':
+        sql = 'SHOW SCHEMAS';
+        if (fqSchema) sql += ` IN DATABASE ${fqSchema}`;
+        if (pattern) sql += ` LIKE '${pattern}'`;
+        break;
+
+      case 'list_tables':
+        sql = 'SHOW TABLES';
+        if (fqSchema) sql += ` IN ${fqSchema}`;
+        if (pattern) sql += ` LIKE '${pattern}'`;
+        break;
+
+      case 'table_count':
+        if (!fqTable) throw new Error('Target table required for table_count query');
+        sql = `SELECT COUNT(*) as row_count FROM ${fqTable}`;
+        break;
+
+      case 'table_size':
+        if (!fqTable) throw new Error('Target table required for table_size query');
+        sql = `
+          SELECT 
+            table_catalog,
+            table_schema,
+            table_name,
+            row_count,
+            bytes,
+            bytes / (1024*1024*1024) as size_gb
+          FROM information_schema.tables 
+          WHERE CONCAT(table_catalog, '.', table_schema, '.', table_name) = '${fqTable}'
+        `;
+        break;
+
+      case 'recent_tables':
+        sql = `
+          SELECT 
+            table_catalog,
+            table_schema,
+            table_name,
+            created as creation_time,
+            last_altered
+          FROM information_schema.tables 
+          WHERE table_schema != 'INFORMATION_SCHEMA'
+        `;
+        if (database) sql += ` AND table_catalog = '${database}'`;
+        if (schema) sql += ` AND table_schema = '${schema}'`;
+        sql += ` ORDER BY last_altered DESC LIMIT ${limit}`;
+        break;
+
+      case 'table_columns':
+        if (!fqTable) throw new Error('Target table required for table_columns query');
+        sql = `
+          SELECT 
+            column_name,
+            data_type,
+            is_nullable,
+            column_default,
+            ordinal_position
+          FROM information_schema.columns 
+          WHERE CONCAT(table_catalog, '.', table_schema, '.', table_name) = '${fqTable}'
+          ORDER BY ordinal_position
+        `;
+        break;
+
+      default:
+        throw new Error(`Unsupported Snowflake query type: ${queryType}`);
+    }
+
+    return { sql, params };
+  }
+
+  /**
+   * Generate Redshift-specific SQL queries
+   * @private
+   * Accepts database, schema, table params and assembles fully qualified target if provided.
+   */
+  _generateRedshiftSQL(queryType, fqTable, limit, pattern, database, schema, table, fqSchema) {
+    const params = {};
+    let sql;
+
+    switch (queryType) {
+      case 'list_databases':
+        sql = `
+          SELECT 
+            datname as database_name,
+            datcreate as creation_time
+          FROM pg_database 
+          WHERE datistemplate = false
+          ORDER BY datname
+          LIMIT ${limit}
+        `;
+        if (pattern) {
+          sql = sql.replace('ORDER BY datname', `AND datname LIKE '${pattern}' ORDER BY datname`);
+        }
+        break;
+
+      case 'list_schemas':
+        sql = `
+          SELECT 
+            catalog_name as database_name,
+            schema_name,
+            schema_owner
+          FROM information_schema.schemata
+          WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_internal')
+        `;
+        if (fqSchema) {
+          const parts = fqSchema.split('.');
+          if (parts.length === 2) {
+            sql += ` AND catalog_name = '${parts[0]}' AND schema_name = '${parts[1]}'`;
+          } else {
+            sql += ` AND schema_name = '${fqSchema}'`;
+          }
+        }
+        if (pattern) {
+          sql += ` AND schema_name LIKE '${pattern}'`;
+        }
+        sql += ` ORDER BY schema_name LIMIT ${limit}`;
+        break;
+
+      case 'list_tables':
+        sql = `
+          SELECT 
+            table_catalog as database_name,
+            table_schema as schema_name,
+            table_name,
+            table_type
+          FROM information_schema.tables
+          WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+        `;
+        if (fqSchema) {
+          const parts = fqSchema.split('.');
+          if (parts.length === 2) {
+            sql += ` AND table_catalog = '${parts[0]}' AND table_schema = '${parts[1]}'`;
+          } else {
+            sql += ` AND table_schema = '${fqSchema}'`;
+          }
+        }
+        if (pattern) {
+          sql += ` AND table_name LIKE '${pattern}'`;
+        }
+        sql += ` ORDER BY table_name LIMIT ${limit}`;
+        break;
+
+      case 'table_count':
+        if (!fqTable) throw new Error('Target table required for table_count query');
+        sql = `SELECT COUNT(*) as row_count FROM ${fqTable}`;
+        break;
+
+      case 'table_size':
+        if (!fqTable) throw new Error('Target table required for table_size query');
+        const [schema2, table2] = fqTable.includes('.') ? fqTable.split('.') : ['public', fqTable];
+        sql = `
+          SELECT 
+            schemaname,
+            tablename,
+            attname,
+            n_distinct,
+            correlation
+          FROM pg_stats 
+          WHERE schemaname = '${schema2}' AND tablename = '${table2}'
+        `;
+        break;
+
+      case 'recent_tables':
+        sql = `
+          SELECT 
+            table_catalog,
+            table_schema,
+            table_name,
+            'N/A' as creation_time,
+            'N/A' as last_modified_time
+          FROM information_schema.tables
+          WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+        `;
+        if (database) sql += ` AND table_catalog = '${database}'`;
+        if (schema) sql += ` AND table_schema = '${schema}'`;
+        sql += ` ORDER BY table_name LIMIT ${limit}`;
+        break;
+
+      case 'table_columns':
+        if (!fqTable) throw new Error('Target table required for table_columns query');
+        const [sch2, tbl2] = fqTable.includes('.') ? fqTable.split('.') : ['public', fqTable];
+        sql = `
+          SELECT 
+            column_name,
+            data_type,
+            is_nullable,
+            column_default,
+            ordinal_position
+          FROM information_schema.columns 
+          WHERE table_schema = '${sch2}' AND table_name = '${tbl2}'
+          ORDER BY ordinal_position
+        `;
+        break;
+
+      default:
+        throw new Error(`Unsupported Redshift query type: ${queryType}`);
+    }
+
+    return { sql, params };
   }
 }
 
@@ -639,9 +1080,494 @@ class EventFormatter {
   }
 }
 
+/**
+ * QuickQueries - Generate common warehouse queries for any platform
+ * Provides SQL templates for frequent operations like listing tables, schemas, etc.
+ */
+class QuickQueries {
+  constructor() {
+    this.logger = new Logger('QuickQueries');
+  }
+
+  /**
+   * Generate SQL for common warehouse operations
+   * @param {Object} options - Query options
+   * @param {string} options.queryType - Type of query (list_databases, list_tables, etc.)
+   * @param {string} options.platform - Database platform (bigquery, snowflake, redshift)
+   * @param {string} [options.target] - Target object (database, schema, or table name)
+   * @param {number} [options.limit] - Result limit
+   * @param {string} [options.pattern] - Pattern for filtering results
+   * @returns {Object} Generated SQL query and parameters
+   * @throws {Error} If query type or platform is not supported
+   */
+  generateQuery({ queryType, platform, target, limit = 50, pattern, projectId, dataset, table, database, schema }) {
+    const normalizedPlatform = platform.toLowerCase();
+    const normalizedQueryType = queryType.toLowerCase();
+    this.logger.debug('Generating quick query', {
+      queryType: normalizedQueryType,
+      platform: normalizedPlatform,
+      target,
+      limit
+    });
+    if (!['bigquery', 'snowflake', 'redshift'].includes(normalizedPlatform)) {
+      throw new Error(`Unsupported platform: ${platform}. Supported: bigquery, snowflake, redshift`);
+    }
+    // Use helper to parse FQ names
+    const { fqTable, fqDataset, fqSchema } = this._parseFQName({ platform: normalizedPlatform, projectId, dataset, table, database, schema, target });
+    switch (normalizedPlatform) {
+      case 'bigquery':
+        return this._generateBigQuerySQL(normalizedQueryType, fqTable, limit, pattern, projectId, dataset, table, fqDataset);
+      case 'snowflake':
+        return this._generateSnowflakeSQL(normalizedQueryType, fqTable, limit, pattern, database, schema, table, fqSchema);
+      case 'redshift':
+        return this._generateRedshiftSQL(normalizedQueryType, fqTable, limit, pattern, database, schema, table, fqSchema);
+      default:
+        throw new Error(`Platform ${platform} not implemented`);
+    }
+  }
+
+  /**
+   * Helper to parse and map incoming parameters to fully qualified names
+   * Supports BigQuery, Snowflake, and Redshift
+   */
+  _parseFQName({ platform, projectId, dataset, table, database, schema, target }) {
+    platform = platform?.toLowerCase();
+    let fqTable = null;
+    let fqDataset = null;
+    let fqSchema = null;
+    // BigQuery
+    if (platform === 'bigquery') {
+      // Validate projectId
+      if (projectId && !/^[a-z][a-z0-9\-]{5,62}$/.test(projectId)) {
+        throw new Error(`Invalid BigQuery projectId: ${projectId}`);
+      }
+      if (projectId && dataset && table) {
+        fqTable = `${projectId}.${dataset}.${table}`;
+      } else if (target && target.split('.').length === 3) {
+        fqTable = target;
+      } else if (table && dataset && projectId) {
+        fqTable = `${projectId}.${dataset}.${table}`;
+      } else if (table && dataset) {
+        fqTable = `${dataset}.${table}`;
+      } else if (target && target.split('.').length === 2) {
+        fqDataset = target;
+      }
+    }
+    // Snowflake
+    else if (platform === 'snowflake') {
+      if (database && schema && table) {
+        fqTable = `${database}.${schema}.${table}`;
+      } else if (target && target.split('.').length === 3) {
+        fqTable = target;
+      } else if (database && schema) {
+        fqSchema = `${database}.${schema}`;
+      } else if (target && target.split('.').length === 2) {
+        fqSchema = target;
+      }
+    }
+    // Redshift
+    else if (platform === 'redshift') {
+      if (schema && table) {
+        fqTable = `${schema}.${table}`;
+      } else if (target && target.split('.').length === 2) {
+        fqTable = target;
+      } else if (database && schema) {
+        fqSchema = `${database}.${schema}`;
+      } else if (target && target.split('.').length === 2) {
+        fqSchema = target;
+      }
+    }
+    return { fqTable, fqDataset, fqSchema };
+  }
+
+  /**
+   * Generate BigQuery-specific SQL queries
+   * @private
+   */
+  _generateBigQuerySQL(queryType, fqTable, limit, pattern, projectId, dataset, table, fqDataset) {
+    const params = {};
+    let sql;
+    switch (queryType) {
+      case 'list_databases':
+        sql = `
+          SELECT 
+            catalog_name as database_name,
+            creation_time
+          FROM \`INFORMATION_SCHEMA.SCHEMATA_OPTIONS\`
+          WHERE schema_name = 'information_schema'
+          GROUP BY catalog_name, creation_time
+          ORDER BY catalog_name
+          LIMIT ${limit}
+        `;
+        break;
+
+      case 'list_schemas':
+        sql = `
+          SELECT 
+            catalog_name as database_name,
+            schema_name,
+            creation_time,
+            location
+          FROM \`INFORMATION_SCHEMA.SCHEMATA\`
+          WHERE schema_name != 'INFORMATION_SCHEMA'
+        `;
+        if (fqDataset) {
+          sql += ` AND catalog_name = @database`;
+          params.database = fqDataset;
+        }
+        if (pattern) {
+          sql += ` AND schema_name LIKE @pattern`;
+          params.pattern = pattern;
+        }
+        sql += ` ORDER BY schema_name LIMIT ${limit}`;
+        break;
+
+      case 'list_tables':
+        if (!fqDataset) {
+          throw new Error('Target dataset required for BigQuery list_tables query');
+        }
+        const [projectId2, datasetId2] = fqDataset.split('.');
+        sql = `
+          SELECT 
+            table_catalog as database_name,
+            table_schema as schema_name,
+            table_name,
+            table_type,
+            creation_time
+          FROM \`${projectId2}.${datasetId2}.INFORMATION_SCHEMA.TABLES\`
+          WHERE 1=1
+        `;
+        if (pattern) {
+          sql += ` AND table_name LIKE @pattern`;
+          params.pattern = pattern;
+        }
+        sql += ` ORDER BY table_name LIMIT ${limit}`;
+        break;
+
+      case 'table_count':
+        if (!fqTable) throw new Error('Target table required for table_count query');
+        sql = `SELECT COUNT(*) as row_count FROM \`${fqTable}\``;
+        break;
+
+      case 'table_size':
+        if (!fqTable) throw new Error('Target table required for table_size query');
+        const [proj, dataset3, table3] = fqTable.split('.');
+        sql = `
+          SELECT 
+            table_catalog,
+            table_schema,
+            table_name,
+            row_count,
+            size_bytes,
+            size_bytes / (1024*1024*1024) as size_gb
+          FROM \`${proj}.${dataset}.__TABLES__\`
+          WHERE table_id = '${table}'
+        `;
+        break;
+
+      case 'recent_tables':
+        sql = `
+          SELECT 
+            table_catalog,
+            table_schema,
+            table_name,
+            creation_time,
+            last_modified_time
+          FROM \`INFORMATION_SCHEMA.TABLES\`
+          WHERE table_schema != 'INFORMATION_SCHEMA'
+          ORDER BY last_modified_time DESC 
+          LIMIT ${limit}
+        `;
+        break;
+
+      case 'table_columns':
+        if (!fqTable) throw new Error('Target table required for table_columns query');
+        const [p, d, t] = fqTable.split('.');
+        sql = `
+          SELECT 
+            column_name,
+            data_type,
+            is_nullable,
+            column_default,
+            ordinal_position
+          FROM \`${p}.${d}.INFORMATION_SCHEMA.COLUMNS\`
+          WHERE table_name = '${t}'
+          ORDER BY ordinal_position
+        `;
+        break;
+
+      default:
+        throw new Error(`Unsupported BigQuery query type: ${queryType}`);
+    }
+    return { sql, params };
+  }
+
+  /**
+   * Generate Snowflake-specific SQL queries
+   * @private
+   * Accepts database, schema, table params and assembles fully qualified target if provided.
+   */
+  _generateSnowflakeSQL(queryType, fqTable, limit, pattern, database, schema, table, fqSchema) {
+    const params = {};
+    let sql;
+
+    switch (queryType) {
+      case 'list_databases':
+        sql = 'SHOW DATABASES';
+        if (pattern) sql += ` LIKE '${pattern}'`;
+        break;
+
+      case 'list_schemas':
+        sql = 'SHOW SCHEMAS';
+        if (fqSchema) sql += ` IN DATABASE ${fqSchema}`;
+        if (pattern) sql += ` LIKE '${pattern}'`;
+        break;
+
+      case 'list_tables':
+        sql = 'SHOW TABLES';
+        if (fqSchema) sql += ` IN ${fqSchema}`;
+        if (pattern) sql += ` LIKE '${pattern}'`;
+        break;
+
+      case 'table_count':
+        if (!fqTable) throw new Error('Target table required for table_count query');
+        sql = `SELECT COUNT(*) as row_count FROM ${fqTable}`;
+        break;
+
+      case 'table_size':
+        if (!fqTable) throw new Error('Target table required for table_size query');
+        sql = `
+          SELECT 
+            table_catalog,
+            table_schema,
+            table_name,
+            row_count,
+            bytes,
+            bytes / (1024*1024*1024) as size_gb
+          FROM information_schema.tables 
+          WHERE CONCAT(table_catalog, '.', table_schema, '.', table_name) = '${fqTable}'
+        `;
+        break;
+
+      case 'recent_tables':
+        sql = `
+          SELECT 
+            table_catalog,
+            table_schema,
+            table_name,
+            created as creation_time,
+            last_altered
+          FROM information_schema.tables 
+          WHERE table_schema != 'INFORMATION_SCHEMA'
+        `;
+        if (database) sql += ` AND table_catalog = '${database}'`;
+        if (schema) sql += ` AND table_schema = '${schema}'`;
+        sql += ` ORDER BY last_altered DESC LIMIT ${limit}`;
+        break;
+
+      case 'table_columns':
+        if (!fqTable) throw new Error('Target table required for table_columns query');
+        sql = `
+          SELECT 
+            column_name,
+            data_type,
+            is_nullable,
+            column_default,
+            ordinal_position
+          FROM information_schema.columns 
+          WHERE CONCAT(table_catalog, '.', table_schema, '.', table_name) = '${fqTable}'
+          ORDER BY ordinal_position
+        `;
+        break;
+
+      default:
+        throw new Error(`Unsupported Snowflake query type: ${queryType}`);
+    }
+
+    return { sql, params };
+  }
+
+  /**
+   * Generate Redshift-specific SQL queries
+   * @private
+   * Accepts database, schema, table params and assembles fully qualified target if provided.
+   */
+  _generateRedshiftSQL(queryType, fqTable, limit, pattern, database, schema, table, fqSchema) {
+    const params = {};
+    let sql;
+
+    switch (queryType) {
+      case 'list_databases':
+        sql = `
+          SELECT 
+            datname as database_name,
+            datcreate as creation_time
+          FROM pg_database 
+          WHERE datistemplate = false
+          ORDER BY datname
+          LIMIT ${limit}
+        `;
+        if (pattern) {
+          sql = sql.replace('ORDER BY datname', `AND datname LIKE '${pattern}' ORDER BY datname`);
+        }
+        break;
+
+      case 'list_schemas':
+        sql = `
+          SELECT 
+            catalog_name as database_name,
+            schema_name,
+            schema_owner
+          FROM information_schema.schemata
+          WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_internal')
+        `;
+        if (fqSchema) {
+          const parts = fqSchema.split('.');
+          if (parts.length === 2) {
+            sql += ` AND catalog_name = '${parts[0]}' AND schema_name = '${parts[1]}'`;
+          } else {
+            sql += ` AND schema_name = '${fqSchema}'`;
+          }
+        }
+        if (pattern) {
+          sql += ` AND schema_name LIKE '${pattern}'`;
+        }
+        sql += ` ORDER BY schema_name LIMIT ${limit}`;
+        break;
+
+      case 'list_tables':
+        sql = `
+          SELECT 
+            table_catalog as database_name,
+            table_schema as schema_name,
+            table_name,
+            table_type
+          FROM information_schema.tables
+          WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+        `;
+        if (fqSchema) {
+          const parts = fqSchema.split('.');
+          if (parts.length === 2) {
+            sql += ` AND table_catalog = '${parts[0]}' AND table_schema = '${parts[1]}'`;
+          } else {
+            sql += ` AND table_schema = '${fqSchema}'`;
+          }
+        }
+        if (pattern) {
+          sql += ` AND table_name LIKE '${pattern}'`;
+        }
+        sql += ` ORDER BY table_name LIMIT ${limit}`;
+        break;
+
+      case 'table_count':
+        if (!fqTable) throw new Error('Target table required for table_count query');
+        sql = `SELECT COUNT(*) as row_count FROM ${fqTable}`;
+        break;
+
+      case 'table_size':
+        if (!fqTable) throw new Error('Target table required for table_size query');
+        const [schema2, table2] = fqTable.includes('.') ? fqTable.split('.') : ['public', fqTable];
+        sql = `
+          SELECT 
+            schemaname,
+            tablename,
+            attname,
+            n_distinct,
+            correlation
+          FROM pg_stats 
+          WHERE schemaname = '${schema2}' AND tablename = '${table2}'
+        `;
+        break;
+
+      case 'recent_tables':
+        sql = `
+          SELECT 
+            table_catalog,
+            table_schema,
+            table_name,
+            'N/A' as creation_time,
+            'N/A' as last_modified_time
+          FROM information_schema.tables
+          WHERE table_schema NOT IN ('information_schema', 'pg_catalog')
+        `;
+        if (database) sql += ` AND table_catalog = '${database}'`;
+        if (schema) sql += ` AND table_schema = '${schema}'`;
+        sql += ` ORDER BY table_name LIMIT ${limit}`;
+        break;
+
+      case 'table_columns':
+        if (!fqTable) throw new Error('Target table required for table_columns query');
+        const [sch2, tbl2] = fqTable.includes('.') ? fqTable.split('.') : ['public', fqTable];
+        sql = `
+          SELECT 
+            column_name,
+            data_type,
+            is_nullable,
+            column_default,
+            ordinal_position
+          FROM information_schema.columns 
+          WHERE table_schema = '${sch2}' AND table_name = '${tbl2}'
+          ORDER BY ordinal_position
+        `;
+        break;
+
+      default:
+        throw new Error(`Unsupported Redshift query type: ${queryType}`);
+    }
+
+    return { sql, params };
+  }
+
+  /**
+   * Get all supported query types
+   * @returns {Array<string>} Array of supported query types
+   */
+  getSupportedQueryTypes() {
+    return [
+      'list_databases',
+      'list_schemas', 
+      'list_tables',
+      'table_count',
+      'table_size',
+      'recent_tables',
+      'table_columns'
+    ];
+  }
+
+  /**
+   * Get platform-specific requirements for a query type
+   * @param {string} queryType - The query type
+   * @param {string} platform - The platform
+   * @returns {Object} Requirements object
+   */
+  getQueryRequirements(queryType, platform) {
+    const requirements = {
+      target_required: ['table_count', 'table_size', 'table_columns'].includes(queryType),
+      target_optional: ['list_schemas', 'list_tables'].includes(queryType),
+      supports_pattern: ['list_databases', 'list_schemas', 'list_tables'].includes(queryType),
+      platform_notes: {}
+    };
+
+    // Platform-specific notes
+    if (platform === 'bigquery') {
+      requirements.platform_notes.list_tables = 'Requires project.dataset format for target';
+      requirements.platform_notes.table_count = 'Requires fully qualified table name: project.dataset.table';
+      requirements.platform_notes.table_size = 'Uses __TABLES__ metadata view';
+    } else if (platform === 'snowflake') {
+      requirements.platform_notes.general = 'Uses SHOW commands and information_schema views';
+    } else if (platform === 'redshift') {
+      requirements.platform_notes.general = 'Uses PostgreSQL-style system catalogs';
+      requirements.platform_notes.table_size = 'Limited size information available';
+    }
+
+    return requirements;
+  }
+}
+
 // Create singleton instances
 const warehouse = new Warehouse();
 const eventFormatter = new EventFormatter();
+const quickQueries = new QuickQueries();
 
 // Register with initialization tracker using the service registry with graceful fallback
 try {
@@ -652,12 +1578,14 @@ try {
     // Log successful initialization
     logger.info('Konbini utilities initialized', {
       warehouse: 'ready',
-      eventFormatter: 'ready'
+      eventFormatter: 'ready',
+      quickQueries: 'ready'
     });
     
     initialization.markInitialized('Konbini', {
       warehouse: 'ready',
-      eventFormatter: 'ready'
+      eventFormatter: 'ready',
+      quickQueries: 'ready'
     });
   } else {
     logger.info('Konbini utilities initialized without tracking');
@@ -667,7 +1595,11 @@ try {
 }
 
 // Export as combined object and individual components
-module.exports = {
+const konbiniExports = {
   warehouse,
-  eventFormatter
+  eventFormatter,
+  quickQueries
 };
+
+export default konbiniExports;
+export { warehouse, eventFormatter, quickQueries };

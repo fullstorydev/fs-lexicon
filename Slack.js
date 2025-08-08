@@ -2,8 +2,8 @@
  * SlackConnector - Connector for Slack webhook notifications
  * Provides methods for sending notifications to different Slack channels
  */
-const ConnectorBase = require('./connectorBase');
-const serviceRegistry = require('./serviceRegistry');
+import ConnectorBase from './connectorBase.js';
+import serviceRegistry from './serviceRegistry.js';
 
 /**
  * Slack connector class
@@ -209,13 +209,12 @@ slackConnector.initialize()
 serviceRegistry.register('slack', slackConnector);
 
 // Export individual methods for backward compatibility
-module.exports = {
+const slackExports = {
   sendWebHook: slackConnector.sendWebHook.bind(slackConnector),
-  sendAIWebHook: slackConnector.sendAIWebHook.bind(slackConnector)
+  sendAIWebHook: slackConnector.sendAIWebHook.bind(slackConnector),
+  client: slackConnector,
+  SlackConnector
 };
 
-// Export the connector as client for new code
-module.exports.client = slackConnector;
-
-// Export the SlackConnector class for custom instantiation
-module.exports.SlackConnector = SlackConnector;
+export default slackExports;
+export { slackConnector as client, SlackConnector };

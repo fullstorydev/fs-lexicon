@@ -1,31 +1,33 @@
 /**
  * Unit tests for WebhookRouter class
  */
-const express = require('express');
-const request = require('supertest');
-const { createMockRequest, createMockResponse, createWebhookPayload } = require('../testHelpers');
+import express from 'express';
+import request from 'supertest';
+import { createMockRequest, createMockResponse, createWebhookPayload } from '../testHelpers.js';
 
 // We need to mock all dependencies before requiring the WebhookRouter
 // Mock critical configuration values that WebhookRouter checks in constructor
-jest.mock('../../config', () => ({
-  get: jest.fn((key, defaultValue) => {
-    const config = {
-      fs_org_api_key: 'mock-api-key',
-      fullstory_token: 'mock-token',
-      fullstory_org_id: 'mock-org-id',
-      slack_webhook_url: 'http://mock-slack-webhook',
-      google_sheets_range: 'Sheet1',
-      jira_project_key: 'TEST',
-      jira_issue_type_id: '10001',
-      jira_session_field_id: 'customfield_10916',
-    };
-    return config[key] || defaultValue;
-  })
+jest.mock('../../config.js', () => ({
+  default: {
+    get: jest.fn((key, defaultValue) => {
+      const config = {
+        fs_org_api_key: 'mock-api-key',
+        fullstory_token: 'mock-token',
+        fullstory_org_id: 'mock-org-id',
+        slack_webhook_url: 'http://mock-slack-webhook',
+        google_sheets_range: 'Sheet1',
+        jira_project_key: 'TEST',
+        jira_issue_type_id: '10001',
+        jira_session_field_id: 'customfield_10916',
+      };
+      return config[key] || defaultValue;
+    })
+  }
 }));
 
 // Mock express
-jest.mock('express', () => {
-  const mockRouter = {
+jest.mock('express', () => ({
+  default: jest.fn(() => ({
     post: jest.fn().mockReturnThis(),
     use: jest.fn().mockReturnThis(),
     stack: [
@@ -49,23 +51,45 @@ jest.mock('express', () => {
         }
       }
     ]
-  };
-  
-  const mockJson = jest.fn().mockReturnValue('json-middleware');
-  
-  return {
-    Router: jest.fn(() => mockRouter),
-    json: jest.fn(() => mockJson)
-  };
-});
+  })),
+  Router: jest.fn(() => ({
+    post: jest.fn().mockReturnThis(),
+    use: jest.fn().mockReturnThis(),
+    stack: [
+      {
+        route: {
+          path: '/slackHook',
+          stack: [
+            { handle: jest.fn() },
+            { handle: jest.fn() }
+          ]
+        }
+      },
+      {
+        route: {
+          path: '/fusion',
+          stack: [
+            { handle: jest.fn() },
+            { handle: jest.fn() },
+            { handle: jest.fn() }
+          ]
+        }
+      }
+    ]
+  })),
+  json: jest.fn(() => jest.fn().mockReturnValue('json-middleware'))
+}));
 
 // Mock initialization tracker
-jest.mock('../../initialization', () => ({
-  registerComponent: jest.fn(),
-  markInitialized: jest.fn(),
-  markFailed: jest.fn(),
-  extractRoutes: jest.fn(),
-  registerConnector: jest.fn(),
+jest.mock('../../initialization.js', () => ({
+  default: {
+    registerComponent: jest.fn(),
+    markInitialized: jest.fn(),
+    markFailed: jest.fn(),
+    extractRoutes: jest.fn(),
+    registerConnector: jest.fn()
+  }
+}));
   markRouterInitialized: jest.fn()
 }));
 

@@ -2,10 +2,10 @@
  * SnowflakeConnector - Connector for connecting to and querying Snowflake
  * Provides a connection pool and query execution methods
  */
-const snowflake = require('snowflake-sdk');
-const { createPrivateKey } = require("crypto");
-const ConnectorBase = require('./connectorBase');
-const serviceRegistry = require('./serviceRegistry');
+import snowflake from 'snowflake-sdk';
+import { createPrivateKey } from "crypto";
+import ConnectorBase from './connectorBase.js';
+import serviceRegistry from './serviceRegistry.js';
 
 /**
  * Snowflake database connector class
@@ -387,4 +387,4 @@ snowflakeConnector.initialize()
 // Register in the service registry
 serviceRegistry.register('snowflake', snowflakeConnector);
 
-module.exports = snowflakeConnector;
+export default snowflakeConnector;
