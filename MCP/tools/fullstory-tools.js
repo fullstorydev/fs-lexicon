@@ -104,7 +104,7 @@ const fullstoryTools = [
   },
   {
     name: 'fullstory_generate_session_context',
-    description: 'Generate context for a session (FullStory v2beta)',
+    description: 'Generate context for a session (FullStory v2)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -157,7 +157,7 @@ const fullstoryTools = [
   },
   {
     name: 'fullstory_generate_context',
-    description: 'Generate generic context for a session (FullStory v2beta)',
+    description: 'Generate generic context for a session (FullStory v2)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -210,7 +210,7 @@ const fullstoryTools = [
   },
   {
     name: 'fullstory_generate_session_summary',
-    description: 'Generate summary for a session profile (FullStory v2beta)',
+    description: 'Generate summary for a session profile (FullStory v2)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -223,7 +223,7 @@ const fullstoryTools = [
   },
   {
     name: 'fullstory_get_session_events',
-    description: 'Get session events for a session profile (FullStory v2beta)',
+    description: 'Get session events for a session profile (FullStory v2)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -235,7 +235,7 @@ const fullstoryTools = [
   },
   {
     name: 'fullstory_get_session_insights',
-    description: 'Get session insights, behavioral clustering, and session metadata for a session (FullStory v2beta). Provides comprehensive session analysis including behavioral patterns, event clustering, session metadata extracted from source properties, and configurable output modes for different use cases.',
+    description: 'Get session insights, behavioral clustering, and session metadata for a session (FullStory v2). Provides comprehensive session analysis including behavioral patterns, event clustering, session metadata extracted from source properties, and configurable output modes for different use cases.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -362,6 +362,21 @@ const fullstoryTools = [
         jobId: { type: 'string', description: 'Batch job ID (required)' }
       },
       required: ['jobId']
+    }
+  },
+  // Annotation APIs
+  {
+    name: 'fullstory_create_annotation',
+    description: 'Create Fullstory Analytics annotations',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'The annotation\'s text (required, max 200 characters)' },
+        start_time: { type: 'string', description: 'The annotation\'s start time in ISO 8601 format. If not provided, the current FullStory server time will be used.' },
+        end_time: { type: 'string', description: 'The annotation\'s end time in ISO 8601 format. If not provided, it will be set to the annotation\'s start_time. If provided, must be after start_time.' },
+        source: { type: 'string', description: 'A string representing the source or creator of this annotation (max 40 characters), which will be displayed on the annotation\'s visualization.' }
+      },
+      required: ['text']
     }
   },
   // V1 APIs
@@ -704,6 +719,15 @@ async function fullstoryDispatcher(request) {
     }
     case 'fullstory_get_batch_job_errors': {
       const result = await fullstoryConnector.getBatchJobErrors(args.jobId);
+      return {
+        content: [
+          { type: 'text', text: asPrettyText(result) }
+        ],
+        structuredContent: result
+      };
+    }
+    case 'fullstory_create_annotation': {
+      const result = await fullstoryConnector.createAnnotation(args);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }

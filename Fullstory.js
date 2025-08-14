@@ -406,6 +406,31 @@ class FullstoryConnector extends ConnectorBase {
     });
   }
 
+  // =============================================================================
+  // V2 API - Annotations (Comprehensive)
+  // =============================================================================
+
+  /**
+   * Create annotation (FullStory v2)
+   * Creates an annotation with the specified details.
+   *
+   * Official API docs: https://developer.fullstory.com/server/annotations/create-annotation/
+   *
+   * @param {Object} annotationData - Annotation data object. Fields include:
+   *   @param {string} annotationData.text - The annotation's text (required, max 200 characters).
+   *   @param {string} [annotationData.start_time] - The annotation's start time in ISO 8601 format. If not provided, the current FullStory server time will be used.
+   *   @param {string} [annotationData.end_time] - The annotation's end time in ISO 8601 format. If not provided, it will be set to the annotation's start_time. If provided, must be after start_time.
+   *   @param {string} [annotationData.source] - A string representing the source or creator of this annotation (max 40 characters), which will be displayed on the annotation's visualization.
+   * @returns {Promise<Object>} Created annotation object containing the annotation details.
+   */
+  async createAnnotation(annotationData) {
+    return this._makeRequest(`${this.apiVersion}/annotations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(annotationData)
+    });
+  }
+
   /**
    * Batch create events (FullStory v2)
    * Creates multiple custom events in a single batch operation.
@@ -1743,7 +1768,7 @@ class FullstoryConnector extends ConnectorBase {
 
   /**
    * Get a session profile
-   * See: https://developer.fullstory.com/server/beta/sessions/get/
+   * See: https://developer.fullstory.com/server/sessions/get/
    * Retrieves a session profile by its profile ID. Only the profile ID is required and supported.
    *
    * @param {Object} params - Parameters for profile retrieval
@@ -1753,7 +1778,7 @@ class FullstoryConnector extends ConnectorBase {
   async getSessionProfile(params) {
     const { profile_id } = params;
     if (!profile_id) throw new Error('profile_id is required');
-    const endpoint = `${this.betaApiVersion}/visit_profile/${encodeURIComponent(profile_id)}`;
+    const endpoint = `${this.apiVersion}/visit_profile/${encodeURIComponent(profile_id)}`;
     return this._makeRequest(endpoint, {
       method: 'GET',
       headers: { 'Accept': 'application/json' }
@@ -1762,7 +1787,7 @@ class FullstoryConnector extends ConnectorBase {
 
   /**
    * Create a session profile
-   * See: https://developer.fullstory.com/server/beta/sessions/create-profile/
+   * See: https://developer.fullstory.com/server/sessions/create-profile/
    * Creates a new session profile with the provided parameters.
    *
    * @param {Object} params - Parameters for profile creation
@@ -1787,7 +1812,7 @@ class FullstoryConnector extends ConnectorBase {
    */
   async createSessionProfile(params) {
     if (!params || !params.profile_id) throw new Error('profile_id is required');
-    const endpoint = `${this.betaApiVersion}/visit_profile`;
+    const endpoint = `${this.apiVersion}/visit_profile`;
     return this._makeRequest(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -1797,7 +1822,7 @@ class FullstoryConnector extends ConnectorBase {
 
   /**
    * Update a session profile
-   * See: https://developer.fullstory.com/server/beta/sessions/update/
+   * See: https://developer.fullstory.com/server/sessions/update/
    * Updates a session profile by its profile ID. The profile ID is required and used as a path parameter.
    *
    * @param {Object} params - Parameters for profile update
@@ -1823,7 +1848,7 @@ class FullstoryConnector extends ConnectorBase {
   async updateSessionProfile(params) {
     const { profile_id, ...body } = params;
     if (!profile_id) throw new Error('profile_id is required');
-    const endpoint = `${this.betaApiVersion}/visit_profile/${encodeURIComponent(profile_id)}`;
+    const endpoint = `${this.apiVersion}/visit_profile/${encodeURIComponent(profile_id)}`;
     return this._makeRequest(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -1833,7 +1858,7 @@ class FullstoryConnector extends ConnectorBase {
 
   /**
    * Delete a session profile
-   * See: https://developer.fullstory.com/server/beta/sessions/delete/
+   * See: https://developer.fullstory.com/server/sessions/delete/
    * Deletes a session profile by its profile ID. The profile ID is required and used as a path parameter.
    *
    * @param {Object} params - Parameters for deletion
@@ -1850,7 +1875,7 @@ class FullstoryConnector extends ConnectorBase {
   async deleteSessionProfile(params) {
     const { profile_id, ...body } = params;
     if (!profile_id) throw new Error('profile_id is required');
-    const endpoint = `${this.betaApiVersion}/visit_profile/${encodeURIComponent(profile_id)}`;
+    const endpoint = `${this.apiVersion}/visit_profile/${encodeURIComponent(profile_id)}`;
     return this._makeRequest(endpoint, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
@@ -1860,7 +1885,7 @@ class FullstoryConnector extends ConnectorBase {
 
   /**
    * List session profiles
-   * See: https://developer.fullstory.com/server/beta/sessions/list-profiles/
+   * See: https://developer.fullstory.com/server/sessions/list-profiles/
    * Retrieves a list of session profiles, optionally filtered by query parameters.
    *
    * @param {Object} [params] - Optional query parameters for filtering profiles.
@@ -1876,7 +1901,7 @@ class FullstoryConnector extends ConnectorBase {
     if (params.limit) queryParams.append('limit', params.limit);
     if (params.offset) queryParams.append('offset', params.offset);
     if (params.sort) queryParams.append('sort', params.sort);
-    const endpoint = `${this.betaApiVersion}/visit_profile${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const endpoint = `${this.apiVersion}/visit_profile${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     return this._makeRequest(endpoint, {
       method: 'GET',
       headers: { 'Accept': 'application/json' }
@@ -1884,11 +1909,11 @@ class FullstoryConnector extends ConnectorBase {
   }
 
   /**
-   * Generate context for a specific session (FullStory Beta)
+   * Generate context for a specific session (FullStory v2)
    *
    * Generates a context object for a session, including user, session, and event context, with optional configuration.
    *
-   * Official API docs: https://developer.fullstory.com/server/beta/sessions/generate-context/
+   * Official API docs: https://developer.fullstory.com/server/sessions/generate-context/
    *
    * @param {string} sessionId - The unique identifier for the session (required).
    * @param {Object} [options] - Optional configuration for context generation.
@@ -1914,7 +1939,7 @@ class FullstoryConnector extends ConnectorBase {
   async generateSessionContext(sessionId, options = {}) {
     if (!sessionId) throw new Error('sessionId is required');
     const query = options.config_profile ? `?config_profile=${encodeURIComponent(options.config_profile)}` : '';
-    const endpoint = `${this.betaApiVersion}/sessions/${encodeURIComponent(sessionId)}/context${query}`;
+    const endpoint = `${this.apiVersion}/sessions/${encodeURIComponent(sessionId)}/context${query}`;
     // Remove config_profile from body if present
     const { config_profile, ...body } = options;
     return this._makeRequest(endpoint, {
@@ -1941,7 +1966,7 @@ class FullstoryConnector extends ConnectorBase {
         enableEventCache = args[2];
       }
       const formattedId = this._formatSessionId(userId, sessionId);
-      let endpoint = `${this.betaApiVersion}/sessions/${formattedId}/events`;
+      let endpoint = `${this.apiVersion}/sessions/${formattedId}/events`;
       if (enableEventCache !== undefined) {
         endpoint += `?enable_event_cache=${enableEventCache ? 'true' : 'false'}`;
       }
@@ -1955,7 +1980,7 @@ class FullstoryConnector extends ConnectorBase {
    *
    * Generates a summary of a session, including key metrics, insights, and highlights.
    *
-   * Official API docs: https://developer.fullstory.com/server/beta/sessions/generate-summary/
+   * Official API docs: https://developer.fullstory.com/server/sessions/generate-summary/
    *
    * @param {string} userId - The unique identifier for the user (required).
    * @param {string} sessionId - The unique identifier for the session (required).
@@ -1969,7 +1994,7 @@ class FullstoryConnector extends ConnectorBase {
         throw new Error('Both userId and sessionId are required');
       }
       const formattedId = this._formatSessionId(userId, sessionId);
-      let endpoint = `${this.betaApiVersion}/sessions/${formattedId}/summary`;
+      let endpoint = `${this.apiVersion}/sessions/${formattedId}/summary`;
       if (configProfile) {
         endpoint += `?config_profile=${encodeURIComponent(configProfile)}`;
       }
