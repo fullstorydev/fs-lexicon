@@ -2,12 +2,12 @@
  * Google Cloud integration services for Lexicon
  * Provides access to BigQuery and other Google Cloud services
  */
-const { BigQuery } = require('@google-cloud/bigquery');
-const { google } = require('googleapis');
-const fs = require('fs');
-const path = require('path');
-const ConnectorBase = require('./connectorBase');
-const serviceRegistry = require('./serviceRegistry');
+import { BigQuery } from '@google-cloud/bigquery';
+import { google } from 'googleapis';
+import fs from 'fs';
+import path from 'path';
+import ConnectorBase from './connectorBase.js';
+import serviceRegistry from './serviceRegistry.js';
 
 /**
  * Base class for Google Cloud services
@@ -39,22 +39,40 @@ class GoogleCloudConnector extends ConnectorBase {
 class BigQueryConnector extends GoogleCloudConnector {
   constructor() {
     super('BigQuery');
-    
     // Use BigQuery-specific keyfile if available, otherwise fall back to common keyfile
     const bigqueryKeyfile = this.getConfig('bigquery_keyfile');
-    
     try {
       const options = {
         projectId: this.projectId
       };
-      
       // Add credentials if available
       if (bigqueryKeyfile) {
-        options.keyFilename = bigqueryKeyfile;
+        // Patch: If keyfile is a JSON string, parse and use as credentials
+        if (typeof bigqueryKeyfile === 'string' && bigqueryKeyfile.trim().startsWith('{')) {
+          try {
+            options.credentials = JSON.parse(bigqueryKeyfile);
+          } catch (e) {
+            // fallback to file path if JSON parse fails
+            options.keyFilename = bigqueryKeyfile;
+          }
+        } else if (typeof bigqueryKeyfile === 'object') {
+          options.credentials = bigqueryKeyfile;
+        } else {
+          options.keyFilename = bigqueryKeyfile;
+        }
       } else if (this.keyFilename) {
-        options.keyFilename = this.keyFilename;
+        if (typeof this.keyFilename === 'string' && this.keyFilename.trim().startsWith('{')) {
+          try {
+            options.credentials = JSON.parse(this.keyFilename);
+          } catch (e) {
+            options.keyFilename = this.keyFilename;
+          }
+        } else if (typeof this.keyFilename === 'object') {
+          options.credentials = this.keyFilename;
+        } else {
+          options.keyFilename = this.keyFilename;
+        }
       }
-      
       this.client = new BigQuery(options);
     } catch (error) {
       this.logger.error('Failed to initialize BigQuery client:', error);
@@ -434,4 +452,5 @@ const googleCloud = {
 };
 
 // Export the combined services object
-module.exports = googleCloud;
+export default googleCloud;
+export { bigQueryConnector as bigQuery, workspaceConnector as workspace };

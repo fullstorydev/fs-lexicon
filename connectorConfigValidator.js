@@ -1,4 +1,4 @@
-const { Logger } = require('./loggerFramework');
+import { Logger } from './loggerFramework.js';
 
 /**
  * Centralized configuration validation system for connectors
@@ -127,4 +127,4 @@ class ConnectorConfigValidator {
   }
 }
 
-module.exports = ConnectorConfigValidator;
+export default ConnectorConfigValidator;

@@ -2,22 +2,21 @@
  * WebhookRouter - Express router for handling various webhook endpoints
  * Routes incoming webhook data to appropriate services
  */
-const express = require('express');
-const { format } = require('date-fns');
-const config = require('./config');
-const { Logger } = require('./loggerFramework');
-const { ErrorHandler, ERROR_TYPES } = require('./errorHandler');
-const { LOG_LEVELS } = require('./loggerFramework');
-const WebhookBase = require('./webhookBase');
+import express from 'express';
+import { format } from 'date-fns';
+import config from './config.js';
+import { Logger, LOG_LEVELS } from './loggerFramework.js';
+import { ErrorHandler, ERROR_TYPES } from './errorHandler.js';
+import WebhookBase from './webhookBase.js';
 
 // Import connector modules 
-const slack = require('./Slack');
-const googleCloud = require('./GoogleCloud');
-const atlassian = require('./Atlassian');
-const Fullstory = require('./Fullstory');
-const snowflake = require('./Snowflake');
-const konbini = require('./konbini');
-const middleware = require('./middleware');
+import slack from './Slack.js';
+import googleCloud from './GoogleCloud.js';
+import atlassian from './Atlassian.js';
+import Fullstory from './Fullstory.js';
+import snowflake from './Snowflake.js';
+import konbini from './konbini.js';
+import middleware from './middleware.js';
 
 /**
  * WebhookRouter class for organizing webhook endpoint handlers
@@ -72,15 +71,27 @@ class WebhookRouter extends WebhookBase {
    * @private
    */
   configureRoutes() {
+    // Apply webhook rate limiting to all routes
+    const webhookRateLimit = middleware.createWebhookRateLimit();
+
     // Basic Slack webhook
-    this.router.post("/slackHook", this.jsonParser, this.handleSlackHook.bind(this));
+    this.router.post("/slackHook", 
+      this.jsonParser, 
+      webhookRateLimit,
+      this.handleSlackHook.bind(this)
+    );
 
     // AI-specific Slack webhook
-    this.router.post("/slackHookAI", this.jsonParser, this.handleSlackHookAI.bind(this));
+    this.router.post("/slackHookAI", 
+      this.jsonParser, 
+      webhookRateLimit,
+      this.handleSlackHookAI.bind(this)
+    );
 
     // Google Sheets webhook
     this.router.post("/googlesheets", 
       this.jsonParser, 
+      webhookRateLimit,
       middleware.validateJsonFields(['user']),
       this.handleGoogleSheets.bind(this)
     );
@@ -88,6 +99,7 @@ class WebhookRouter extends WebhookBase {
     // Jira ticket creation webhook
     this.router.post("/makeJiraTicket", 
       this.jsonParser,
+      webhookRateLimit,
       middleware.validateJsonFields(['user', 'name']),
       this.handleJiraTicket.bind(this)
     );
@@ -95,6 +107,7 @@ class WebhookRouter extends WebhookBase {
     // Fullstory Fusion webhook
     this.router.post("/fusion", 
       this.jsonParser,
+      webhookRateLimit,
       middleware.validateJsonFields(['user']),
       this.handleFusion.bind(this)
     );
@@ -102,6 +115,7 @@ class WebhookRouter extends WebhookBase {
     // Snowflake data update webhook
     this.router.post("/updateSnowflake",
       this.jsonParser,
+      webhookRateLimit,
       middleware.validateJsonFields(['user', 'properties']),
       this.handleSnowflakeUpdate.bind(this)
     );
@@ -109,6 +123,7 @@ class WebhookRouter extends WebhookBase {
     // BigQuery data update webhook
     this.router.post("/updateBigQuery",
       this.jsonParser,
+      webhookRateLimit,
       middleware.validateJsonFields(['user', 'properties']),
       this.handleBigQueryUpdate.bind(this)
     );
@@ -357,7 +372,7 @@ class WebhookRouter extends WebhookBase {
       // Get configuration values with proper error handling
       const projectKey = config.get('jira_project_key');
       const issueTypeId = config.get('jira_issue_type_id');
-      const customFieldId = config.get('jira_session_field_id', 'customfield_10916');
+      const customFieldId = config.get('jira_session_field_id', 'customfield_XXXXX');
       
       if (!projectKey || !issueTypeId) {
         this.logger.error('Missing required Jira configuration', {
@@ -785,7 +800,7 @@ class WebhookRouter extends WebhookBase {
 const webhookRouterInstance = new WebhookRouter();
 
 // Register with initialization tracker
-const initialization = require('./initialization');
+import initialization from './initialization.js';
 
 try {
   // Use the router instance directly to automatically detect routes
@@ -795,4 +810,4 @@ try {
 }
 
 // Export the router instance
-module.exports = webhookRouterInstance.getRouter();
+export default webhookRouterInstance.getRouter();

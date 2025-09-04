@@ -1,11 +1,12 @@
 /**
  * Middleware - Express middleware functions for request processing and validation
  */
-const crypto = require('crypto');
-const config = require('./config');
-const { Logger } = require('./loggerFramework');
-const { ErrorHandler } = require('./errorHandler');
-const serviceRegistry = require('./serviceRegistry');
+import crypto from 'crypto';
+import config from './config.js';
+import { Logger } from './loggerFramework.js';
+import { ErrorHandler } from './errorHandler.js';
+import serviceRegistry from './serviceRegistry.js';
+import rateLimiter from './rateLimiter.js';
 
 /**
  * Middleware class with various request handlers
@@ -29,12 +30,24 @@ class MiddlewareService {
 
   /**
    * Verify Fullstory webhook signature
+   * SECURITY WARNING: This method validates webhook authenticity. 
+   * Only disable verification in explicit development environments.
    * @param {Object} req - Express request object
    * @param {Object} res - Express response object
    * @param {Function} next - Express next function
    */
   verifyWebHook(req, res, next) {
     try {
+      // Skip signature verification ONLY if explicitly enabled for development
+      // This is a security-critical check - only bypass in explicitly configured dev environments
+      const isDevelopment = process.env.NODE_ENV === 'development' || 
+                           process.env.SKIP_WEBHOOK_VERIFICATION === 'true';
+      
+      if (isDevelopment) {
+        this.logger.warn('SECURITY: Skipping webhook signature verification in development mode');
+        return next();
+      }
+
       // Check if signature header exists
       const signature = req.headers["fullstory-signature"];
       if (!signature) {
@@ -173,6 +186,80 @@ class MiddlewareService {
 
     next();
   }
+
+  /**
+   * Create general rate limiting middleware
+   * @param {Object} options - Rate limiting options
+   * @returns {Function} Express middleware function
+   */
+  createRateLimit(options = {}) {
+    if (!rateLimiter.initialized) {
+      this.logger.warn('Rate limiter not initialized, creating pass-through middleware');
+      return (req, res, next) => next();
+    }
+    
+    return rateLimiter.createMiddleware({
+      category: 'general',
+      ...options
+    });
+  }
+
+  /**
+   * Create API-specific rate limiting middleware
+   * @param {Object} options - Additional rate limiting options
+   * @returns {Function} Express middleware function
+   */
+  createApiRateLimit(options = {}) {
+    if (!rateLimiter.initialized) {
+      this.logger.warn('Rate limiter not initialized, creating pass-through middleware');
+      return (req, res, next) => next();
+    }
+    
+    return rateLimiter.createMiddleware({
+      category: 'api',
+      windowMs: rateLimiter.config.apiWindowMs,
+      maxRequests: rateLimiter.config.apiMaxRequests,
+      ...options
+    });
+  }
+
+  /**
+   * Create webhook-specific rate limiting middleware
+   * @param {Object} options - Additional rate limiting options
+   * @returns {Function} Express middleware function
+   */
+  createWebhookRateLimit(options = {}) {
+    if (!rateLimiter.initialized) {
+      this.logger.warn('Rate limiter not initialized, creating pass-through middleware');
+      return (req, res, next) => next();
+    }
+    
+    return rateLimiter.createMiddleware({
+      category: 'webhook',
+      windowMs: rateLimiter.config.webhookWindowMs,
+      maxRequests: rateLimiter.config.webhookMaxRequests,
+      ...options
+    });
+  }
+
+  /**
+   * Create MCP-specific rate limiting middleware
+   * @param {Object} options - Additional rate limiting options
+   * @returns {Function} Express middleware function
+   */
+  createMcpRateLimit(options = {}) {
+    if (!rateLimiter.initialized) {
+      this.logger.warn('Rate limiter not initialized, creating pass-through middleware');
+      return (req, res, next) => next();
+    }
+    
+    return rateLimiter.createMiddleware({
+      category: 'mcp',
+      windowMs: rateLimiter.config.mcpWindowMs,
+      maxRequests: rateLimiter.config.mcpMaxRequests,
+      ...options
+    });
+  }
 }
 
 // Create singleton instance
@@ -195,17 +282,23 @@ try {
   logger.error('Failed to register middleware with initialization tracker', error);
 }
 
-// Register middleware in the service registry
+// Export middleware methods with proper binding to the instance
+const middlewareExports = {
+  verifyWebHook: middleware.verifyWebHook.bind(middleware),
+  validateJsonFields: (requiredFields) => middleware.validateJsonFields(requiredFields),
+  logRequest: middleware.logRequest.bind(middleware),
+  createRateLimit: middleware.createRateLimit.bind(middleware),
+  createApiRateLimit: middleware.createApiRateLimit.bind(middleware),
+  createWebhookRateLimit: middleware.createWebhookRateLimit.bind(middleware),
+  createMcpRateLimit: middleware.createMcpRateLimit.bind(middleware)
+};
+
+// Register the bound exports in the service registry (not the raw instance)
 try {
-  serviceRegistry.register('middleware', middleware);
+  serviceRegistry.register('middleware', middlewareExports);
 } catch (error) {
   const logger = new Logger('Middleware');
   logger.warn('Failed to register middleware in service registry', error);
 }
 
-// Export middleware methods with proper binding to the instance
-module.exports = {
-  verifyWebHook: (req, res, next) => middleware.verifyWebHook(req, res, next),
-  validateJsonFields: (requiredFields) => middleware.validateJsonFields(requiredFields),
-  logRequest: (req, res, next) => middleware.logRequest(req, res, next)
-};
+export default middlewareExports;

@@ -1,12 +1,12 @@
 /**
- * Lexicon - Multi-cloud serverless function entry point
+ * Lexicon - Multi-cloud serverless function entry point (ES Modules)
  */
-const config = require('./config');
-const startup = require('./startup');
-const { Logger } = require('./loggerFramework');
-const { ErrorHandler } = require('./errorHandler');
-const express = require('express');
-const serviceRegistry = require('./serviceRegistry');
+import config from './config.js';
+import startup from './startup.js';
+import { Logger } from './loggerFramework.js';
+import { ErrorHandler } from './errorHandler.js';
+import express from 'express';
+import serviceRegistry from './serviceRegistry.js';
 
 // Configure logger for index.js
 const logger = new Logger('Index');
@@ -14,10 +14,23 @@ const logger = new Logger('Index');
 // Get the cloud provider
 const cloud_provider = config.get('cloud_provider', 'GCP');
 
+// Check if we should run in MCP mode
+const isMCPMode = process.env.MCP_MODE === 'true' || process.argv.includes('--mcp');
+
+// If MCP mode is requested, delegate to MCP server
+if (isMCPMode) {
+  logger.info('Starting in MCP mode...');
+  const { main } = await import('./MCP/mcp-main.js');
+  main().catch((error) => {
+    logger.error('MCP mode failed:', error);
+    process.exit(1);
+  });
+  process.exit(0); // Exit after starting MCP mode
+}
+
 // Create and export a minimal Express app right away that will be used
 // as the handler for cloud functions. This ensures it is defined immediately.
 const app = express();
-exports.lexicon = app;
 
 // Use a minimal initial configuration that just handles requests during initialization
 app.use((req, res, next) => {
@@ -45,19 +58,28 @@ app.use(express.json());
 /**
  * CloudAdapter - Base class for cloud provider adapters
  */
-class CloudAdapter {
+export class CloudAdapter {
   /**
    * Initialize the adapter with standard middleware
    */
   constructor() {
+    this.logger = new Logger('CloudAdapter');
+    this.errorHandler = new ErrorHandler('CloudAdapter');
+    this.middlewares = [express.json()]; // Basic middleware
+  }
+  
+  /**
+   * Initialize async components
+   */
+  async initialize() {
     // Get middleware from the service registry if available
     let middleware;
     try {
       middleware = serviceRegistry.has('middleware') ? 
         serviceRegistry.get('middleware') : 
-        require('./middleware');
+        (await import('./middleware.js')).default;
     } catch (error) {
-      logger.error('Failed to get middleware, using empty object:', error);
+      this.logger.error('Failed to get middleware, using empty object:', error);
       middleware = { 
         logRequest: (req, res, next) => next(),
         verifyWebHook: (req, res, next) => next()
@@ -66,11 +88,19 @@ class CloudAdapter {
 
     this.middlewares = [
       express.json(),
+      middleware.createRateLimit(), // Add rate limiting
       middleware.logRequest, // Add consistent request logging
       middleware.verifyWebHook
     ];
-    this.logger = new Logger('CloudAdapter');
-    this.errorHandler = new ErrorHandler('CloudAdapter');
+  }
+  
+  /**
+   * Create an instance of CloudAdapter
+   */
+  static async create() {
+    const instance = new CloudAdapter();
+    await instance.initialize();
+    return instance;
   }
   
   /**
@@ -125,25 +155,42 @@ class CloudAdapter {
   }
 }
 
-// Export the class for testing
-exports.CloudAdapter = CloudAdapter;
-
 /**
  * Google Cloud Functions/Cloud Run adapter
  */
-class GCPAdapter extends CloudAdapter {
+export class GCPAdapter extends CloudAdapter {
   constructor() {
     super();
-    const express = require('express');
     this.app = express();
     
     // Track whether we're running in Cloud Run or Cloud Functions
     this.isCloudRun = process.env.K_SERVICE !== undefined;
+  }
+  
+  /**
+   * Initialize async components
+   */
+  async initialize() {
+    await super.initialize();
     
     // For Cloud Functions, we need the functions framework
     if (!this.isCloudRun) {
-      this.functions = require('@google-cloud/functions-framework');
+      try {
+        this.functions = await import('@google-cloud/functions-framework');
+      } catch (error) {
+        this.logger.warn('Functions framework not available, running in development mode');
+        this.functions = null;
+      }
     }
+  }
+  
+  /**
+   * Create an instance of GCPAdapter
+   */
+  static async create() {
+    const instance = new GCPAdapter();
+    await instance.initialize();
+    return instance;
   }
   
   /**
@@ -170,9 +217,13 @@ class GCPAdapter extends CloudAdapter {
       const port = parseInt(process.env.PORT || '8080', 10);
       
       // Only start the server if this is the main module
-      if (require.main === module) {
+      if (import.meta.url === `file://${process.argv[1]}`) {
         this.app.listen(port, () => {
-          console.log(`Cloud Run service listening on port ${port}`);
+          this.logger.info(`Cloud Run service listening on port ${port}`, {
+            port: port,
+            provider: 'GCP',
+            mode: 'Cloud Run'
+          });
         });
       }
       
@@ -181,40 +232,63 @@ class GCPAdapter extends CloudAdapter {
         expressApp: this.app
       };
     } else {
-      // For Cloud Functions, use the functions framework
-      return {
-        lexicon: this.functions.http('lexicon', this.app)
-      };
+      // For Cloud Functions, use the functions framework if available
+      if (this.functions && this.functions.http) {
+        return {
+          lexicon: this.functions.http('lexicon', this.app)
+        };
+      } else {
+        // Fallback for development - just return the express app
+        this.logger.warn('Functions framework not available, using Express app directly');
+        return {
+          expressApp: this.app
+        };
+      }
     }
   }
 }
 
-// Export the class for testing
-exports.GCPAdapter = GCPAdapter;
-
 /**
  * Azure Functions adapter
  */
-class AzureAdapter extends CloudAdapter {
+export class AzureAdapter extends CloudAdapter {
   constructor() {
     super();
     // Detect if we're running in Azure Functions or Azure App Service
     this.isAppService = !process.env.FUNCTIONS_WORKER_RUNTIME;
     
-    const express = require('express');
     this.app = express();
+  }
+  
+  /**
+   * Initialize async components
+   */
+  async initialize() {
+    await super.initialize();
     
     // Only initialize Azure Functions SDK if running in Functions environment
     if (!this.isAppService) {
       try {
-        const { app } = require('@azure/functions');
+        const { app } = await import('@azure/functions');
         this.azureApp = app;
         this.routes = [];
       } catch (error) {
-        console.error('Failed to initialize Azure Functions SDK:', error);
+        this.logger.error('Failed to initialize Azure Functions SDK', {
+          error: error.message,
+          stack: error.stack
+        });
         throw new Error('Azure Functions SDK initialization failed');
       }
     }
+  }
+  
+  /**
+   * Create an instance of AzureAdapter
+   */
+  static async create() {
+    const instance = new AzureAdapter();
+    await instance.initialize();
+    return instance;
   }
   
   addRoute(path, router) {
@@ -236,388 +310,220 @@ class AzureAdapter extends CloudAdapter {
       // For Azure App Service, start the HTTP server
       const port = parseInt(process.env.PORT || '8080', 10);
       
-      // Only start server when running as main module
-      if (require.main === module) {
+      // Only start the server if this is the main module
+      if (import.meta.url === `file://${process.argv[1]}`) {
         this.app.listen(port, () => {
-          console.log(`Azure App Service listening on port ${port}`);
+          this.logger.info(`Azure App Service listening on port ${port}`, {
+            port: port,
+            provider: 'AZURE',
+            mode: 'App Service'
+          });
         });
       }
       
+      // Return the Express app for testing/direct use
       return {
         expressApp: this.app
       };
     } else {
-      // For Azure Functions
-      const express = require('express');
-      const app = express();
-      
-      // Add all routes to Express app
-      for (const route of this.routes) {
-        app.use(route.path, ...this.middlewares, route.router);
-      }
-      
-      // Add error handling middleware
-      this._addErrorHandler(app);
-      
-      // Register the HTTP trigger
-      this.azureApp.http('lexicon', {
-        methods: ['GET', 'POST'],
-        authLevel: 'function',
-        handler: async (request, context) => {
-          // Create a response mock for Express.js
-          const mockRes = this._createResponseMock();
-          
-          try {
-            await this._processRequest(app, request, mockRes, context);
-          } catch (error) {
-            // Use the errorHandler for consistent error handling
-            context.log.error('Error processing request:', error);
-            const errorResponse = this.errorHandler.handleError(error, 'Azure Functions handler');
-            
-            context.res = {
-              status: 500,
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(errorResponse)
+      // For Azure Functions, register HTTP triggers
+      this.routes.forEach(({ path, router }) => {
+        this.azureApp.http(`lexicon-${path.replace(/[^a-zA-Z0-9]/g, '')}`, {
+          methods: ['GET', 'POST', 'PUT', 'DELETE'],
+          route: path.startsWith('/') ? path.substring(1) : path,
+          handler: (request, context) => {
+            // Create Express-like request and response objects
+            const req = {
+              ...request,
+              method: request.method,
+              path: request.path || request.url,
+              body: request.body,
+              headers: request.headers,
+              query: request.query
             };
+            
+            const res = {
+              status: (code) => {
+                context.res = { ...context.res, status: code };
+                return res;
+              },
+              json: (data) => {
+                context.res = { 
+                  ...context.res, 
+                  body: JSON.stringify(data),
+                  headers: { 'Content-Type': 'application/json' }
+                };
+                return res;
+              }
+            };
+            
+            // Execute middleware chain
+            const executeMiddlewares = async (middlewares, index = 0) => {
+              if (index >= middlewares.length) {
+                return;
+              }
+              
+              const middleware = middlewares[index];
+              return new Promise((resolve, reject) => {
+                middleware(req, res, (err) => {
+                  if (err) reject(err);
+                  else resolve(executeMiddlewares(middlewares, index + 1));
+                });
+              });
+            };
+            
+            return executeMiddlewares([...this.middlewares, router]);
           }
-        }
+        });
       });
       
-      return this.azureApp;
+      return {
+        azureApp: this.azureApp
+      };
     }
   }
-  
-  _createResponseMock() {
-    return {
-      statusCode: 200,
-      headers: {},
-      body: null,
-      json: function(body) {
-        this.body = JSON.stringify(body);
-        this.headers['Content-Type'] = 'application/json';
-        return this;
-      },
-      status: function(code) {
-        this.statusCode = code;
-        return this;
-      },
-      setHeader: function(key, value) {
-        this.headers[key] = value;
-        return this;
-      },
-      send: function(body) {
-        this.body = body;
-        return this;
-      }
-    };
+}
+
+/**
+ * AWS Lambda adapter
+ */
+export class AWSAdapter extends CloudAdapter {
+  constructor() {
+    super();
+    this.app = express();
+    
+    // Detect if we're running in Lambda or Elastic Beanstalk/EC2
+    this.isLambda = process.env.AWS_LAMBDA_FUNCTION_NAME !== undefined;
   }
   
   /**
-   * Process an Express request and map it to Azure response format
-   * @param {Object} app - Express application
-   * @param {Object} request - HTTP request
-   * @param {Object} mockRes - Mock response object
-   * @param {Object} context - Azure function context
-   * @returns {Promise<void>} Resolves when request is processed
-   * @private
+   * Initialize async components
    */
-  async _processRequest(app, request, mockRes, context) {
-    if (!request || !app || !mockRes) {
-      context.log.error('Invalid request processing parameters');
-      context.res = {
-        status: 500,
-        body: JSON.stringify({ error: 'Internal server error - invalid request processing' })
+  async initialize() {
+    await super.initialize();
+    
+    if (this.isLambda) {
+      const serverlessExpress = await import('@vendia/serverless-express');
+      this.serverlessExpress = serverlessExpress.default;
+    }
+  }
+  
+  /**
+   * Create an instance of AWSAdapter
+   */
+  static async create() {
+    const instance = new AWSAdapter();
+    await instance.initialize();
+    return instance;
+  }
+  
+  addRoute(path, router) {
+    this.app.use(path, ...this.middlewares, router);
+    return this;
+  }
+  
+  deploy() {
+    // Add error handling middleware
+    this._addErrorHandler(this.app);
+    
+    if (this.isLambda) {
+      // For Lambda, use serverless-express
+      return {
+        lexicon: this.serverlessExpress({ app: this.app })
       };
-      return;
-    }
-
-    // Add required Express.js properties if they don't exist
-    request.originalUrl = request.url;
-    request.path = request.url?.split('?')[0];
-    request.query = request.query || {};
-    request.params = request.params || {};
-    
-    return new Promise((resolve, reject) => {
-      let isResolved = false;
+    } else {
+      // For EC2/Beanstalk, start HTTP server
+      const port = parseInt(process.env.PORT || '8080', 10);
       
-      // Create a timeout to prevent hanging promises
-      const timeout = setTimeout(() => {
-        if (!isResolved) {
-          isResolved = true;
-          context.log.error('Request processing timed out');
-          reject(new Error('Request processing timed out'));
-        }
-      }, 30000); // 30-second timeout
+      // Only start the server if this is the main module
+      if (import.meta.url === `file://${process.argv[1]}`) {
+        this.app.listen(port, () => {
+          this.logger.info(`AWS service listening on port ${port}`, {
+            port: port,
+            provider: 'AWS',
+            mode: 'App Runner/Lambda'
+          });
+        });
+      }
       
-      app(request, mockRes, (err) => {
-        clearTimeout(timeout); // Clear the timeout
-        
-        if (isResolved) return; // Don't resolve/reject if already handled
-        isResolved = true;
-        
-        if (err) {
-          context.log.error('Express middleware error:', err);
-          reject(err);
-        } else {
-          context.res = {
-            status: mockRes.statusCode,
-            body: mockRes.body,
-            headers: mockRes.headers
-          };
-          resolve();
-        }
-      });
-    });
-  }
-}
-
-// Export the class for testing
-exports.AzureAdapter = AzureAdapter;
-
-/**
- * AWS App Runner adapter
- */
-class AWSAdapter extends CloudAdapter {
-  constructor() {
-    super();
-    const express = require('express');
-    this.app = express();
-  }
-  
-  addRoute(path, router) {
-    this.app.use(path, ...this.middlewares, router);
-    return this;
-  }
-  
-  deploy() {
-    // Add error handling middleware
-    this._addErrorHandler(this.app);
-    
-    // For AWS App Runner, we need to start an HTTP server
-    const port = parseInt(process.env.PORT || '8080', 10);
-    
-    // Only start the server if this is the main module
-    if (require.main === module) {
-      this.app.listen(port, () => {
-        console.log(`AWS App Runner service listening on port ${port}`);
-      });
+      // Return the Express app for testing/direct use
+      return {
+        expressApp: this.app
+      };
     }
-    
-    return {
-      expressApp: this.app
-    };
   }
 }
 
-// Export the class for testing
-exports.AWSAdapter = AWSAdapter;
+// Export variables that need to be accessed
+export { app, cloud_provider };
 
-/**
- * Test adapter for unit tests
- */
-class TestAdapter extends CloudAdapter {
-  constructor() {
-    super();
-    const express = require('express');
-    this.app = express();
-  }
-  
-  addRoute(path, router) {
-    this.app.use(path, ...this.middlewares, router);
-    return this;
-  }
-  
-  deploy() {
-    // Add error handling middleware
-    this._addErrorHandler(this.app);
-    
-    return {
-      expressApp: this.app
-    };
-  }
-}
-
-// Export the class for testing
-exports.TestAdapter = TestAdapter;
-
-/**
- * Factory function to create the appropriate adapter
- * @param {string} provider - Cloud provider name
- * @returns {CloudAdapter} The appropriate cloud adapter instance
- * @throws {Error} If provider is not supported
- */
-function createCloudAdapter(provider) {
-  if (!provider) {
-    console.warn('No cloud provider specified, defaulting to GCP');
-    provider = 'GCP';
-  }
-
-  switch (provider.toUpperCase()) {
-    case 'GCP':
-      return new GCPAdapter();
-    
-    case 'AZURE':
-      return new AzureAdapter();
-    
-    case 'AWS':
-      return new AWSAdapter();
-    
-    case 'TEST':
-      return new TestAdapter();
-    
-    default:
-      throw new Error(`Unsupported cloud provider: ${provider}`);
-  }
-}
-
-// Export the factory function for testing
-exports.createCloudAdapter = createCloudAdapter;
-
-// Create and configure the adapter
-(async function() {
+// Main initialization function
+async function initializeLexicon() {
   try {
-    // Log environment information for debugging purposes
-    const nodeEnv = config.get('node_env', 'development');
-    const isCloudEnv = config.get('_isRunningInCloud', false);
+    logger.info(`Starting Lexicon on ${cloud_provider}...`);
+
+    // Import initialization module
+    const initialization = (await import('./initialization.js')).default;
     
-    logger.info(`Lexicon starting in ${nodeEnv} environment${isCloudEnv ? ' (cloud detected)' : ''}`, {
-      cloudProvider: cloud_provider,
-      version: process.env.npm_package_version || '1.0.0'
-    });
+    initialization.markInitialized('Index');
     
-    // Initialize services in the correct order
+    // Initialize Lexicon services first
     await startup.initialize();
     
-    // Get references to initialized services
-    const initialization = serviceRegistry.get('initialization');
-    const webhookRouter = serviceRegistry.get('webhookRouter');
-    
-    // Register the adapter component before trying to create it
-    initialization.registerComponent(`${cloud_provider}Adapter`);
+    // Create appropriate cloud adapter
     let adapter;
     
-    try {
-      adapter = createCloudAdapter(cloud_provider);
-      
-      // Register the adapter in the service registry
-      serviceRegistry.register('cloudAdapter', adapter);
-      
-      initialization.markInitialized(`${cloud_provider}Adapter`, {
-        provider: cloud_provider,
-        isCloudRun: adapter.isCloudRun,
-        isAppService: adapter.isAppService
-      });
-    } catch (error) {
-      initialization.markFailed(`${cloud_provider}Adapter`, error);
-      throw error; // Re-throw to handle in outer catch
+    switch (cloud_provider.toUpperCase()) {
+      case 'GCP':
+        adapter = await GCPAdapter.create();
+        break;
+      case 'AZURE':
+        adapter = await AzureAdapter.create();
+        break;
+      case 'AWS':
+        adapter = await AWSAdapter.create();
+        break;
+      default:
+        throw new Error(`Unsupported cloud provider: ${cloud_provider}`);
     }
     
-    // Register routes components
-    initialization.registerComponent('Routes');
+    initialization.markInitialized('CloudAdapter');
+    
+    // Configure adapter with routes
     try {
-      // Add routes
-      adapter.addRoute('/webhook', webhookRouter);
-      adapter.addHealthCheck();
+      const webhookRouter = serviceRegistry.has('webhookRouter') ?
+        serviceRegistry.get('webhookRouter') :
+        (await import('./webhookRouter.js')).default;
       
-      initialization.markInitialized('Routes', {
-        endpoints: ['/webhook', '/health']
-      });
+      adapter
+        .addRoute('/webhook', webhookRouter)
+        .addHealthCheck();        initialization.markInitialized('Webhook Routes');
     } catch (error) {
-      initialization.markFailed('Routes', error);
+      initialization.markFailed('Webhook Routes', error);
       throw error;
     }
     
-    // Register deployment component
-    initialization.registerComponent('Deployment');
-    let deployment;
+    // Deploy the application
     try {
-      // Deploy and export the handler
-      deployment = adapter.deploy();
+      const deployment = adapter.deploy();
       
-      // Include the full deployment details
-      initialization.markInitialized('Deployment', {
-        type: cloud_provider
-      });
+      // Mark the app as initialized
+      app.initialized = true;
       
-      // Wait for all registered connectors to initialize
-      try {
-        // This leverages the registration that happens in ConnectorBase
-        await initialization.waitForConnectors();
-        
-        // Now generate the final summary after all connectors are accounted for
-        initialization.finalizeSummary();
-        
-        // Log the final initialization state
-        logger.info(`Lexicon initialized successfully with ${cloud_provider} adapter`, {
-          api: 'WebhookRouter, HealthCheck',
-          connectors: initialization.getRegisteredConnectorsString(),
-          env: nodeEnv
-        });
-
-        // Mark the app as fully initialized
-        app.initialized = true;
-        
-        // Mount all routes directly on the app we exported at the beginning
-        if (adapter && webhookRouter) {
-          logger.info('Mounting webhook routes on main app');
-          const middleware = require('./middleware');
-          app.use('/webhook', middleware.verifyWebHook, webhookRouter);
-          
-          // Add health check endpoint
-          app.get('/health', (req, res) => {
-            res.status(200).json({ 
-              status: 'ok', 
-              provider: cloud_provider,
-              version: process.env.npm_package_version || '1.0.0',
-              timestamp: new Date().toISOString(),
-              environment: config.get('node_env', 'development')
-            });
-          });
-        }
-      } catch (error) {
-        logger.error('Error waiting for connectors to initialize:', error);
-      }
-      
-      // Configure the lexicon app directly instead of replacing it
-      if (cloud_provider.toUpperCase() === 'GCP') {
-        if (deployment.expressApp) {
-          // Copy all routes and middleware from the deployed app to our exported app
-          lexiconApp = deployment.expressApp;
-          logger.info('Configured Express app for direct handling');
-        }
-      }
-      
-      // Now that everything is initialized, export the correct app or function handler
-      if (cloud_provider.toUpperCase() === 'GCP') {
-        if (deployment.lexicon) {
-          // For Cloud Functions
-          exports.lexicon = deployment.lexicon;
-          logger.info('Exported function handler for Cloud Functions');
-        } else if (deployment.expressApp) {
-          // For Cloud Run
-          exports.lexicon = deployment.expressApp;
-          logger.info('Exported Express app handler for Cloud Run');
-        }
-      } else if (cloud_provider.toUpperCase() === 'AZURE') {
-        // For Azure, the deployment itself is the handler
-        if (!adapter.isAppService) {
-          // Nothing to export as Azure Functions handles registration differently
-          logger.info('Configured Azure Functions HTTP triggers');
-        } else if (deployment.expressApp) {
-          // For App Service
-          exports.lexicon = deployment.expressApp;
-          logger.info('Exported Express app handler for Azure App Service');
-        }
-      } else if (deployment.expressApp) {
-        // For AWS and other providers
-        exports.lexicon = deployment.expressApp;
-        logger.info(`Exported Express app handler for ${cloud_provider}`);
-      }
-      
-      // Export the Express app for testing purposes
       if (deployment.expressApp) {
-        exports.app = deployment.expressApp;
+        // Copy all routes and middleware from the adapter's app to our main app
+        deployment.expressApp._router.stack.forEach(layer => {
+          app._router.stack.push(layer);
+        });
+        
+        logger.info('Configured Express app for direct handling');
       }
+      
+      initialization.markInitialized('Deployment');
+      
+      // Store deployment for export
+      app.deployment = deployment;
+      
     } catch (error) {
       initialization.markFailed('Deployment', error);
       throw error;
@@ -625,6 +531,8 @@ exports.createCloudAdapter = createCloudAdapter;
     
     // Log initialization summary
     initialization.logSummary();
+    
+    return app;
     
   } catch (error) {
     logger.error('Failed to initialize cloud adapter:', error);
@@ -635,8 +543,51 @@ exports.createCloudAdapter = createCloudAdapter;
     }
     
     // Don't throw in production, but exit with error if this is the main module
-    if (require.main === module) {
+    if (import.meta.url === `file://${process.argv[1]}`) {
       process.exit(1);
     }
+    
+    throw error;
   }
-})();
+}
+
+// Initialize if this is the main module
+if (import.meta.url === `file://${process.argv[1]}`) {
+  initializeLexicon().catch(error => {
+    logger.error('Failed to start Lexicon:', error);
+    process.exit(1);
+  });
+}
+
+// Export the main app and initialization function
+export default app;
+export { initializeLexicon };
+
+// Export for Google Cloud Functions Framework compatibility
+// Initialize immediately when the module is imported
+const initializeForFunctions = async () => {
+  try {
+    logger.info('Initializing Lexicon for Google Cloud Functions Framework...');
+    await initializeLexicon();
+    logger.info('Lexicon initialization completed');
+    return app;
+  } catch (error) {
+    logger.error('Failed to initialize Lexicon:', error);
+    // Return an error handler app
+    const errorApp = express();
+    errorApp.use((req, res) => {
+      res.status(503).json({
+        success: false,
+        error: 'Service initialization failed',
+        message: error.message
+      });
+    });
+    return errorApp;
+  }
+};
+
+// Create the initialized app for Functions Framework
+export const lexicon = await initializeForFunctions();
+
+// For compatibility with CommonJS exports, we'll need to set up dynamic exports
+// This will be handled in the migration by updating the cloud-specific deployment code

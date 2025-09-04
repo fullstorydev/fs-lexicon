@@ -1,0 +1,50 @@
+# Multi-stage build for optimal container size
+FROM node:20-alpine AS builder
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies (production only)
+RUN npm install --only=production && npm cache clean --force
+
+# Production stage
+FROM node:20-alpine AS production
+
+# Install dumb-init for proper signal handling
+RUN apk add --no-cache dumb-init
+
+# Create app user for security
+RUN addgroup -g 1001 -S nodejs && \
+    adduser -S lexicon -u 1001
+
+# Set working directory
+WORKDIR /app
+
+# Copy node_modules from builder stage
+COPY --from=builder /app/node_modules ./node_modules
+
+# Copy application code
+COPY --chown=lexicon:nodejs . .
+
+# Create necessary directories
+RUN mkdir -p /app/logs && \
+    chown -R lexicon:nodejs /app
+
+# Switch to non-root user
+USER lexicon
+
+# Health check for Cloud Run
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD node -e "console.log('MCP Server Health Check OK')" || exit 1
+
+# Expose port for Cloud Run
+EXPOSE 8080
+
+# Use dumb-init to handle signals properly
+ENTRYPOINT ["dumb-init", "--"]
+
+# Default command - can be overridden
+CMD ["node", "MCP/mcp-main.js"]

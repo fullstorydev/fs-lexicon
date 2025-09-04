@@ -1,16 +1,23 @@
 {
-    "name": "lexicon",
-    "version": "1.0.0",
+    "name": "fs-lexicon",
+    "version": "1.1.0",
     "description": "A Fullstory middleware intended to receive, transform and route behavioural activation instructions.",
+    "type": "module",
     "main": "index.js",
     "scripts": {
         "start": "node index.js",
-        "test": "jest --config ./tests/jest.config.js",
-        "test:ci": "jest --config ./tests/jest.config.js --ci --coverage",
-        "test:watch": "jest --config ./tests/jest.config.js --watch",
-        "test:coverage": "jest --config ./tests/jest.config.js --coverage",
-        "test:unit": "jest --config ./tests/jest.config.js --testPathPattern=tests/unit",
-        "test:integration": "jest --config ./tests/jest.config.js --testPathPattern=tests/integration",
+        "start:mcp": "node MCP/mcp-main.js",
+        "mcp": "node MCP/mcp-main.js",
+        "build:cloudrun": "docker build -f MCP/Dockerfile.mcp -t lexicon-mcp .",
+        "docker:mcp:gcp": "gcloud builds submit --config MCP/cloudbuild.yaml .",
+        
+        "# Utility Scripts": "",
+        "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js",
+        "test:ci": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --ci --coverage",
+        "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --watch",
+        "test:coverage": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --coverage",
+        "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=tests/unit",
+        "test:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=tests/integration",
         "test:clean": "rm -rf ./coverage",
         "test:update-snapshots": "jest --config ./tests/jest.config.js --updateSnapshot",
         "test:webhook": "jest --config ./tests/jest.config.js --testPathPattern=tests/unit/webhookRouter.test.js",
@@ -19,6 +26,15 @@
         "test:webhook:integration": "jest --config ./tests/jest.config.js --testPathPattern=tests/integration/webhook.integration.test.js",
         "test:changed": "jest --config ./tests/jest.config.js --onlyChanged",
         "test:verbose": "jest --config ./tests/jest.config.js --verbose",
+        "test:rate-limiting": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=comprehensive-rate-limiting.test.js",
+        "test:rate-limiting:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=integration-rate-limiting.test.js",
+        "test:mcp:auth": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=mcp-auth.test.js --forceExit",
+        "test:mcp:validation": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=mcp-input-validation.test.js --forceExit",
+        "test:mcp:security": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=mcp-security.integration.test.js --forceExit",
+        "test:mcp:security:all": "npm run test:mcp:auth && npm run test:mcp:validation && npm run test:mcp:security",
+        "test:mcp:enhanced": "./tests/enhanced-mcp-test.sh",
+        "test:comprehensive": "node ./tests/run-comprehensive-tests.js",
+        "test:comprehensive:no-server": "node ./tests/run-comprehensive-tests.js --skip-server",
         "verify": "node ./scripts/verify-installation.js",
         "docker:build": "docker build -t lexicon:$(node -p \"require('./package.json').version\") -t lexicon:latest --build-arg VERSION=$(node -p \"require('./package.json').version\") .",
         "docker:build:dev": "docker build -t lexicon:dev-$(node -p \"require('./package.json').version\") -t lexicon:dev --build-arg VERSION=$(node -p \"require('./package.json').version\") --build-arg NODE_ENV=development --build-arg SKIP_TESTS=true --build-arg K_SERVICE=local-dev --target builder .",
@@ -31,7 +47,8 @@
         "docker:stop:all": "docker ps -q --filter name=lexicon | xargs -r docker stop",
         "docker:ps": "docker ps",
         "docker:kill:port": "docker ps -q --filter publish=8080 | xargs -r docker stop",
-        "dev:gcf": "npx @google-cloud/functions-framework --target=lexicon",
+        "dev:gcf": "NODE_ENV=development npx @google-cloud/functions-framework --target=lexicon",
+        "dev:gcf:no-verify": "NODE_ENV=development SKIP_WEBHOOK_VERIFICATION=true npx @google-cloud/functions-framework --target=lexicon",
         "dev:docker": "npm run docker:build:dev && npm run docker:run:env",
         "dev:mount": "docker run --name lexicon-dev -p 8080:8080 --env-file .env -e K_SERVICE=local-dev -v ${PWD}:/usr/src/app -v /usr/src/app/node_modules lexicon:dev",
         "dev:clean": "docker build -t lexicon:dev-$(node -p \"require('./package.json').version\") -t lexicon:dev --build-arg VERSION=$(node -p \"require('./package.json').version\") --build-arg NODE_ENV=development --build-arg SKIP_TESTS=true --build-arg K_SERVICE=local-dev --no-cache --target builder . && npm run docker:run:env"
@@ -40,12 +57,17 @@
         "@azure/functions": "^3.5.0",
         "@google-cloud/bigquery": "^7.9.3",
         "@google-cloud/functions-framework": "^3.1.0",
+        "@modelcontextprotocol/sdk": "1.13.3",
+        "compression": "^1.8.0",
         "date-fns": "^2.30.0",
         "dotenv": "^16.0.3",
-        "express": "^4.18.2",
+        "express": "^5.0.0",
+        "express-rate-limit": "^7.0.0",
         "googleapis": "^144.0.0",
+        "helmet": "^7.2.0",
         "node-fetch": "^2.6.9",
-        "snowflake-sdk": "^2.0.3"
+        "snowflake-sdk": "^2.0.3",
+        "zod": "^3.25.67"
     },
     "devDependencies": {
         "babel-jest": "^29.5.0",
@@ -56,7 +78,7 @@
         "supertest": "^6.3.3"
     },
     "engines": {
-        "node": ">=14"
+        "node": ">=20"
     },
     "author": "fullstory",
     "license": "MIT"

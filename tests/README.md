@@ -1,12 +1,17 @@
-# Lexicon Test Suite
+# Developer Guide: Writing Tests for Lexicon
 
-> This document covers the test suite for the [Lexicon](../README.md) project - a multi-cloud serverless function that transforms and routes Fullstory data across multiple cloud platforms.
+> **👀 Looking to run tests?** See **[TESTING.md](../TESTING.md)** for the comprehensive testing guide.  
+> **This document** focuses on how to write and contribute tests to the Lexicon project.
 
-## Overview
+## 🎯 Purpose
 
-This folder contains the test suite for the Lexicon project - a multi-cloud serverless function middleware that receives, transforms, and routes webhooks for various services.
+This guide covers **writing and contributing tests** for the [Lexicon](../README.md) project. The test suite is fully **ESM-compatible** with comprehensive coverage including rate limiting, security, and integration testing.
 
-The test suite follows a structured approach with unit tests for individual components and integration tests for end-to-end validation. It utilizes Jest as the testing framework and provides helper functions to make tests consistent and maintainable.
+**Test Architecture:**
+- ✅ **ES Modules**: All tests use modern `import`/`export` syntax
+- ✅ **Jest + ESM**: Uses `jest.unstable_mockModule()` patterns
+- ✅ **Multi-layer Testing**: Unit, integration, and bash script tests
+- ✅ **Zero Process Leaks**: Clean teardown and worker management
 
 ## Test Structure
 
@@ -34,6 +39,12 @@ tests/
 - **ConnectorBase**: Base class for service connectors that provides initialization, config validation, and retry functionality.
 - **WebhookRouter**: Express router that handles various webhook endpoints (Slack, Fusion, GoogleSheets, etc.)
 
+### Security Systems (New)
+
+- **MCP Authentication**: OAuth 2.1 authentication system with PKCE, token validation, and authorization server discovery
+- **Input Validation**: Comprehensive input validation and sanitization protecting against SQL injection, XSS, path traversal, and command injection
+- **Security Integration**: End-to-end testing of authentication and validation working together under various conditions
+
 ## Test Helpers
 
 The `testHelpers.js` file provides reusable functions for tests:
@@ -44,26 +55,36 @@ The `testHelpers.js` file provides reusable functions for tests:
 - `createWebhookPayload(eventType, overrides)`: Creates specific webhook payloads for different integrations
 - `wait(ms)`: Utility for async testing to pause execution
 
-## Running Tests
+## Running Tests While Developing
 
-You can run tests using npm scripts defined in package.json:
+> **💡 Tip**: For comprehensive test running, see **[TESTING.md](../TESTING.md)**
+
+Quick commands for **test-driven development**:
 
 ```bash
-# Run all tests
-npm test
+# Watch mode for TDD
+npm run test:watch           # Auto-rerun tests on file changes
+npm run test:coverage        # Run with code coverage report
+npm run test:verbose         # Detailed test output
 
-# Run specific test groups
-npm run test:unit            # Run all unit tests
-npm run test:integration     # Run all integration tests
-npm run test:webhook         # Run webhookRouter tests
-npm run test:webhook:base    # Run webhookBase tests
-npm run test:connector:base  # Run connectorBase tests
+# Target specific components while developing
+npm run test:unit            # All unit tests (ESM-compatible)
+npm run test:webhook         # WebhookRouter tests  
+npm run test:webhook:base    # WebhookBase tests
+npm run test:connector:base  # ConnectorBase tests
 
-# Run with additional options
-npm run test:coverage        # Run with code coverage
-npm run test:watch           # Run in watch mode
-npm run test:verbose         # Run with verbose output
+# Security testing (New)
+npm run test:mcp:auth        # OAuth 2.1 authentication tests
+npm run test:mcp:validation  # Input validation and sanitization tests
+npm run test:mcp:security    # Security integration tests (requires server)
+npm run test:mcp:security:all # All security tests in sequence
 ```
+
+**ESM Development:**
+All tests use modern ES modules with Jest's experimental VM modules support.
+
+**Security Testing:**
+Security tests include comprehensive coverage of authentication and input validation systems. Configure test environment by copying `tests/mcp-security.env.example` to `tests/test.env`.
 
 ## Test Patterns
 
@@ -87,15 +108,41 @@ Example pattern for webhook integration tests:
 3. Send HTTP requests to endpoints
 4. Assert correct responses and that the right service calls were made
 
-## Adding New Tests
+## Adding New Tests (ESM Style)
 
-When adding new tests, follow these guidelines:
+### **ESM Test Template**
+```javascript
+import { jest } from '@jest/globals';
 
-1. **Use test helpers**: Leverage the helper functions in `testHelpers.js` for consistency
-2. **Follow existing patterns**: Match the style of existing tests
-3. **Mock external dependencies**: Don't make real API calls in tests
-4. **Test both success and failure cases**: Verify error handling works correctly
-5. **Keep tests focused**: Each test should verify a specific behavior
+// Mock dependencies BEFORE imports
+jest.unstable_mockModule('../../dependency.js', () => ({
+  default: jest.fn(),
+  someMethod: jest.fn()
+}));
+
+// Import after mocks
+const { default: YourModule } = await import('../../YourModule.js');
+const { default: dependency } = await import('../../dependency.js');
+
+describe('YourModule', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  test('should do something', async () => {
+    // Test implementation
+  });
+});
+```
+
+### **Guidelines for New Tests**
+
+1. **🎯 Use ESM patterns**: Always use `jest.unstable_mockModule()` and `await import()`
+2. **🛠️ Leverage test helpers**: Use functions from `testHelpers.js` for consistency  
+3. **🎭 Mock external dependencies**: No real API calls in tests
+4. **✅ Test success + failure**: Verify both happy path and error handling
+5. **🔍 Keep tests focused**: Each test should verify one specific behavior
+6. **🧹 Clean up**: Use `beforeEach(() => jest.clearAllMocks())` to prevent test bleed
 
 ## Testing Base Classes
 
@@ -113,34 +160,100 @@ The test suite uses Jest's mocking capabilities:
 - Express is partially mocked to allow testing route configuration
 - Configuration is mocked to provide consistent test values
 
-## Coverage Goals
+## Coverage Goals & ESM Testing Patterns
 
-For a good balance of reliability and maintenance effort, we aim for:
+### **Coverage Targets**
+- **80-90% coverage** for core classes (WebhookBase, ConnectorBase)
+- **75-85% coverage** for routers and handlers  
+- **Comprehensive integration tests** for main webhook flows
 
-1. **80-90% coverage** for core code (WebhookBase, ConnectorBase)
-2. **75-85% coverage** for the router and handlers
-3. **Key integration tests** covering the main webhook paths
+### **ESM Testing Patterns**
 
-> **Note on Current Coverage:** As of April 16, 2025, the current test coverage metrics are:
-> 
-> - Statement Coverage: 22.88%
-> - Branch Coverage: 18.93% 
-> - Function Coverage: 22.62%
-> - Line Coverage: 23.22%
->
-> Some components like `WebhookBase` (96.49%) and `ConnectorBase` (91.89%) have excellent coverage, which aligns with our goals. However, many other components require additional test coverage.
->
-> Contributors are encouraged to add tests when implementing new features or fixing bugs.
+**Modern Mock Setup:**
+```javascript
+import { jest } from '@jest/globals';
+
+// Use jest.unstable_mockModule for ESM
+jest.unstable_mockModule('../../module.js', () => ({
+  default: jest.fn(),
+  namedExport: jest.fn()
+}));
+
+// Import after mocks
+const { default: Module } = await import('../../module.js');
+```
+
+**Async Import Pattern:**
+```javascript
+describe('Component Tests', () => {
+  let Component;
+  
+  beforeAll(async () => {
+    Component = await import('../../Component.js');
+  });
+});
+```
 
 ## Common Issues and Solutions
 
 - **Failing tests due to timeouts**: Check for unresolved promises or missing async/await
 - **Mock not being called**: Ensure the mock is properly set up and the correct instance is being used
 - **Test order dependencies**: Make sure each test properly sets up its environment and doesn't depend on previous tests
+- **Jest hanging after tests complete**: This is caused by open handles (timers, fetch mocks, etc.). The MCP test commands now include `--forceExit` to prevent hanging. If you see "Jest did not exit one second after the test run has completed", use Ctrl+C or run individual tests with `--forceExit`
 
-## Contributing
+## 🚀 Test Server Management
 
-When adding new tests:
-1. Update this README if you add new test patterns or helpers
-2. Ensure all tests pass before submitting changes
-3. Include both positive and negative test cases
+### Simple Two-Terminal Approach
+
+For **running tests against a live server**:
+
+```bash
+# Terminal 1: Start MCP server with your real configuration
+MCP_MODE=true npm start                # Uses your .env file
+
+# Terminal 2: Run tests
+npm run test:comprehensive             # Full test suite
+```
+
+### What This Approach Provides
+
+✅ **Real Configuration**: Uses your actual `.env` file and credentials  
+✅ **Full MCP Features**: Authentication system + input validation enabled  
+✅ **Default Rate Limits**: Reasonable limits (increase if needed during heavy testing)  
+✅ **All Connectors**: FullStory with real configurations  
+✅ **Auto-Detection**: Test runner detects your running server automatically  
+
+### Rate Limit Adjustments
+
+If tests hit rate limits (429 errors), restart with higher limits:
+```bash
+# Terminal 1: Higher limits for heavy testing
+TOOL_RATE_LIMIT_MAX_REQUESTS=2000 MCP_RATE_LIMIT_MAX_REQUESTS=3000 MCP_MODE=true npm start
+```
+
+## 📖 Documentation Guide
+
+### **This File (`tests/README.md`)** - Developer Guide
+- 🛠️ **How to write tests** for Lexicon
+- 🎯 **ESM patterns and templates** for contributors
+- 🔧 **Test helpers and utilities** documentation
+- 📚 **Best practices** for test development
+
+### **Root `TESTING.md`** - User Guide  
+- ⚡ **How to run tests** (comprehensive test suite)
+- 🔐 **Test data security** and environment configuration
+- 🧪 **Rate limiting tests** and integration testing
+- 🚀 **CI/CD commands** and production testing
+
+## Contributing to Tests
+
+**When writing new tests:**
+1. ✅ Follow ESM patterns shown in this guide
+2. ✅ Use test helpers from `testHelpers.js` 
+3. ✅ Include both success and error test cases
+4. ✅ Ensure all tests pass: `npm run test:unit`
+
+**When updating test infrastructure:**
+1. Update **this file** for new developer patterns
+2. Update **`TESTING.md`** for new test commands or security features
+3. Keep both files focused on their specific audiences

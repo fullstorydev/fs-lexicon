@@ -369,7 +369,7 @@ function createLogger(context) {
   return new Logger(context);
 }
 
-module.exports = {
+export {
   Logger,
   LOG_LEVELS,
   ERROR_TYPES,

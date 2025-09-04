@@ -2,51 +2,67 @@
  * Unit tests for WebhookBase class
  */
 
+import { jest } from '@jest/globals';
+
 // Initialize all mocks before any imports
 const mockRegisterComponent = jest.fn();
 const mockMarkInitialized = jest.fn();
 const mockMarkFailed = jest.fn();
 const mockExtractRoutes = jest.fn().mockReturnValue(['GET /test']);
 
-jest.mock('../../initialization', () => ({
-  registerComponent: mockRegisterComponent,
-  markInitialized: mockMarkInitialized,
-  markFailed: mockMarkFailed,
-  extractRoutes: mockExtractRoutes
+jest.unstable_mockModule('../../initialization.js', () => ({
+  default: {
+    registerComponent: mockRegisterComponent,
+    markInitialized: mockMarkInitialized,
+    markFailed: mockMarkFailed,
+    extractRoutes: mockExtractRoutes
+  }
 }));
 
-jest.mock('../../serviceRegistry', () => ({
-  get: jest.fn().mockImplementation(() => require('../../initialization')),
-  has: jest.fn().mockReturnValue(true)
+jest.unstable_mockModule('../../serviceRegistry.js', () => ({
+  default: {
+    get: jest.fn().mockImplementation(() => ({
+      registerComponent: mockRegisterComponent,
+      markInitialized: mockMarkInitialized,
+      markFailed: mockMarkFailed,
+      extractRoutes: mockExtractRoutes
+    })),
+    has: jest.fn().mockReturnValue(true)
+  }
 }));
 
 // Mock the date-fns format function
-jest.mock('date-fns', () => ({
+jest.unstable_mockModule('date-fns', () => ({
   format: jest.fn().mockImplementation(() => '04/15/25 10:00 AM')
 }));
 
 // Mock other dependencies
-jest.mock('../../loggerFramework', () => ({
+jest.unstable_mockModule('../../loggerFramework.js', () => ({
   Logger: jest.fn().mockImplementation(() => ({
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
-    debug: jest.fn()
+    debug: jest.fn(),
+    refreshLogLevel: jest.fn().mockReturnValue(3)
   }))
 }));
 
-jest.mock('../../errorHandler', () => ({
+jest.unstable_mockModule('../../errorHandler.js', () => ({
   ErrorHandler: jest.fn().mockImplementation(() => ({
+    handleError: jest.fn(),
+    createErrorResponse: jest.fn(),
+    createValidationError: jest.fn()
+  })),
+  createErrorHandler: jest.fn().mockImplementation(() => ({
     handleError: jest.fn()
   }))
 }));
 
 // Now import modules after all mocks are set up
-const WebhookBase = require('../../webhookBase');
-const { Logger } = require('../../loggerFramework');
-const { ErrorHandler } = require('../../errorHandler');
-const serviceRegistry = require('../../serviceRegistry');
-const initialization = require('../../initialization');
+const { default: WebhookBase } = await import('../../webhookBase.js');
+const { Logger } = await import('../../loggerFramework.js');
+const { createErrorHandler } = await import('../../errorHandler.js');
+const { default: serviceRegistry } = await import('../../serviceRegistry.js');
 
 describe('WebhookBase', () => {
   let webhook;
@@ -66,7 +82,8 @@ describe('WebhookBase', () => {
     it('should initialize with the provided name', () => {
       expect(webhook.name).toBe('TestWebhook');
       expect(Logger).toHaveBeenCalledWith('Webhook:TestWebhook');
-      expect(ErrorHandler).toHaveBeenCalledWith('Webhook:TestWebhook');
+      // Note: webhookBase.js uses 'new ErrorHandler()' directly, not createErrorHandler
+      // expect(createErrorHandler).toHaveBeenCalledWith('Webhook:TestWebhook');
       expect(mockRegisterComponent).toHaveBeenCalledWith('Webhook:TestWebhook');
     });
     

@@ -1,7 +1,7 @@
-const { format } = require('date-fns');
-const { Logger } = require('./loggerFramework');
-const { ErrorHandler } = require('./errorHandler');
-const serviceRegistry = require('./serviceRegistry');
+import { format } from 'date-fns';
+import { Logger } from './loggerFramework.js';
+import { ErrorHandler } from './errorHandler.js';
+import serviceRegistry from './serviceRegistry.js';
 
 /**
  * Base class for all webhook handlers
@@ -234,11 +234,11 @@ class WebhookBase {
    * @returns {string} Formatted operation string
    * @protected
    */
-  formatDatabaseOperation(operation, table) {
+  async formatDatabaseOperation(operation, table) {
     // Delegate to konbini.js warehouse module for consistent formatting
-    const konbini = require('./konbini');
+    const konbini = (await import('./konbini.js')).default;
     return konbini.warehouse.formatOperation(operation, table);
   }
 }
 
-module.exports = WebhookBase;
+export default WebhookBase;

@@ -1,0 +1,21 @@
+# Google Cloud Build Configuration for Lexicon MCP
+# 
+# IMPORTANT: Before using this file, replace the following placeholders:
+# - YOUR_REGISTRY_HOST: Your container registry host (e.g., us-central1-docker.pkg.dev)
+# - YOUR_PROJECT_ID: Your Google Cloud Project ID
+# - YOUR_REGISTRY_NAME: Your container registry name
+#
+# Example:
+# us-central1-docker.pkg.dev/my-project-123/my-registry/lexicon-mcp
+
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: 
+  - 'build'
+  - '-f'
+  - 'MCP/Dockerfile.mcp'
+  - '-t'
+  - 'YOUR_REGISTRY_HOST/YOUR_PROJECT_ID/YOUR_REGISTRY_NAME/lexicon-mcp'
+  - '.'
+images:
+- 'YOUR_REGISTRY_HOST/YOUR_PROJECT_ID/YOUR_REGISTRY_NAME/lexicon-mcp'

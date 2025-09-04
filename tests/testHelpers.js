@@ -109,25 +109,6 @@ function createWebhookPayload(eventType = 'generic', overrides = {}) {
       priority: 'high',
       description: 'Test issue description'
     },
-    snowflake: {
-      ...baseEvent,
-      data: {
-        table: 'STOCK_MANAGEMENT',
-        columns: ['product_id', 'quantity'],
-        values: ['product-123', 15]
-      }
-    },
-    bigquery: {
-      ...baseEvent,
-      data: {
-        table: 'fs_data_destinations.lead_info',
-        row: {
-          lead_id: 'lead-123',
-          source: 'website',
-          score: 85
-        }
-      }
-    }
   };
   
   return {
@@ -145,7 +126,7 @@ function wait(ms = 100) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-module.exports = {
+export {
   createMockRequest,
   createMockResponse,
   createTestEventData,

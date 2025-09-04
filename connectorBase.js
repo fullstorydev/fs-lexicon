@@ -1,9 +1,9 @@
-const { Logger } = require('./loggerFramework');
-const { createErrorHandler } = require('./errorHandler');
-const ConnectorConfigValidator = require('./connectorConfigValidator');
-const serviceRegistry = require('./serviceRegistry');
+import { Logger } from './loggerFramework.js';
+import { createErrorHandler } from './errorHandler.js';
+import ConnectorConfigValidator from './connectorConfigValidator.js';
+import serviceRegistry from './serviceRegistry.js';
 // Direct import of config for fallback when registry isn't ready
-const configFallback = require('./config');
+import configFallback from './config.js';
 
 /**
  * Base class for all connectors
@@ -168,6 +168,20 @@ class ConnectorBase {
       return defaultValue;
     }
   }
+
+  /**
+   * Check if the connector is healthy
+   * @returns {boolean} True if connector is healthy
+   */
+  isHealthy() {
+    try {
+      // Basic health check: initialized and configured
+      return this.initialized && this.validator.checkIsConfigured();
+    } catch (error) {
+      this.logger.debug(`Health check failed for ${this.name}:`, error.message);
+      return false;
+    }
+  }
 }
 
-module.exports = ConnectorBase;
+export default ConnectorBase;
