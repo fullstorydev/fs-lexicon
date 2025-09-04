@@ -146,7 +146,7 @@ describe('Enhanced FullStory Connector', () => {
         { name: 'exception', timestamp: '2023-01-01T10:05:00Z' }
       ];
       
-      const clustering = FullstoryConnector._generateEventClustering(mockEvents);
+      const clustering = FullstoryConnector._generateEventClusteringFromSorted(mockEvents);
       console.log('- Behavioral clustering results:');
       console.log('  Total events:', clustering.totalEvents);
       console.log('  Event types:', clustering.eventTypes);

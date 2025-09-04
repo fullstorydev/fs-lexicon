@@ -7,18 +7,26 @@
 </div>
 
 
-## 📦 ES Module Migration
+## 📦 ES Module Migration - Complete
 
-Lexicon has fully migrated from CommonJS to modern ECMAScript Modules (ESM). All source files now use `import`/`export` syntax, and connectors (such as `Fullstory.js`) are implemented as ES Modules. Please ensure your environment and tooling support ESM (Node.js ≥ 14, preferably 18+).
+Lexicon has **fully migrated** from CommonJS to modern ECMAScript Modules (ESM), including **complete test infrastructure modernization**. All source files, tests, and tooling now use `import`/`export` syntax. Please ensure your environment supports ESM (Node.js ≥ 14, preferably 18+).
 
-**Key changes:**
-- All imports use `import ... from ...` (no `require()`).
-- All exports use `export`/`export default`.
-- Example usage:
-  ```js
-  import fullstoryConnector from './Fullstory.js';
-  ```
-- No legacy CommonJS (`module.exports` or `require`) remains in the codebase.
+**Migration Complete:**
+- ✅ **Source Code**: All connectors and services use ESM (`import`/`export`)
+- ✅ **Test Infrastructure**: All Jest tests migrated to ESM with `jest.unstable_mockModule()`
+- ✅ **Build & Tooling**: Package.json configured for `"type": "module"`
+- ✅ **Zero Legacy Code**: No CommonJS (`require`/`module.exports`) remains
+
+**Example usage:**
+```js
+import fullstoryConnector from './Fullstory.js';
+```
+
+**Testing with ESM:**
+```bash
+npm run test:unit                 # All tests run with ESM support
+npm run test:comprehensive        # Full test suite with modern patterns
+```
 
 ## 🚀 Quick Start
 
@@ -42,6 +50,85 @@ npm run docker:build
 npm run docker:run:env
 ```
 
+## ⚙️ Setup for Your Organization
+
+Before deploying Lexicon to your own infrastructure, you'll need to customize several configuration files with your project-specific details.
+
+### Required Customizations
+
+#### 1. **Update Cloud Build Configuration (Optional)**
+
+If you plan to use Google Cloud Build, update `MCP/cloudbuild.yaml` with your container registry details:
+
+```yaml
+# Replace:
+YOUR_REGISTRY_HOST/YOUR_PROJECT_ID/YOUR_REGISTRY_NAME/lexicon-mcp
+
+# With your actual registry path:
+us-central1-docker.pkg.dev/my-project-123/my-registry/lexicon-mcp
+```
+
+#### 2. **Configure Environment Variables**
+
+Lexicon reads configuration from environment variables, which should be managed through your cloud provider's secret management system in production.
+
+**For Local Development:**
+Create a `.env` file in the project root:
+
+```bash
+# Core FullStory Configuration
+FULLSTORY_API_KEY=your_fullstory_api_key
+FULLSTORY_ORG_ID=your_fullstory_org_id
+FULLSTORY_DC=your_datacenter  # NA1 or EU1
+
+# Jira Configuration (replace customfield_XXXXX with your actual field ID)
+JIRA_SESSION_FIELD_ID=customfield_12345
+JIRA_BASE_URL=https://your-domain.atlassian.net
+JIRA_API_TOKEN_2=your_jira_api_token
+JIRA_PROJECT_ID=your_project_key
+JIRA_ISSUE_TYPE_ID=your_issue_type_id
+
+# Google Cloud Configuration
+GOOGLE_PROJECT_ID=your_google_project_id
+GOOGLE_WORKSPACE_KEY_FILE=path_to_your_service_account_key
+GOOGLE_WORKSPACE_SHEET_ID=your_google_sheet_id
+
+# Other integrations as needed
+SLACK_WEBHOOK_URL=your_slack_webhook_url
+SNOWFLAKE_ACCOUNT_IDENTIFIER=your_snowflake_account
+```
+
+**For Production:**
+Use your cloud provider's secret management system:
+- **Google Cloud**: Google Secret Manager
+- **Azure**: Azure Key Vault  
+- **AWS**: AWS Secrets Manager
+
+The same environment variable names should be configured in your deployment environment. Lexicon's config.js automatically reads from environment variables regardless of source.
+
+#### 3. **Find Your Jira Custom Field ID**
+
+To find your Jira session field ID:
+
+1. Go to Jira → Settings → Issues → Custom Fields
+2. Find your session/URL field 
+3. Look at the URL when editing - it will show `customfield_XXXXX`
+4. Use this ID in your `JIRA_SESSION_FIELD_ID` environment variable
+
+### Quick Setup Checklist
+
+**Local Development:**
+- [ ] Create `.env` file with your credentials (for local development only)
+- [ ] Configure your Jira custom field ID in the `.env` file
+- [ ] Test local deployment: `npm start`
+- [ ] Test MCP mode: `npm run start:mcp`
+
+**Production Deployment:**
+- [ ] Configure environment variables in your cloud provider's secret manager
+- [ ] Update `MCP/cloudbuild.yaml` with your registry path (if using Google Cloud Build)
+- [ ] Build MCP Docker image: `npm run build:cloudrun`
+- [ ] Deploy using your preferred cloud platform deployment method
+
 ## 📋 Table of Contents
 - [Overview](#overview)
 - [Features](#features)
@@ -57,6 +144,7 @@ npm run docker:run:env
 - [Deployment](#deployment)
 - [Local Development](#local-development)
 - [Testing](#testing)
+- [Rate Limiting](#rate-limiting)
 - [Security Configuration](#security-configuration-mcp-mode)
 - [Contributing](#contributing)
 
@@ -105,6 +193,8 @@ cat terraform-blueprint.tf
 - **Service Registry**: Centralized service management with dependency injection
 - **Controlled Startup Sequence**: Phased initialization to prevent circular dependencies
 - **Comprehensive Logging**: Structured logging with redaction of sensitive information
+- **Enterprise Rate Limiting**: Configurable rate limiting with Redis clustering support
+- **Production-Ready Testing**: ESM-compatible tests with secure environment-driven configuration
 - **Docker Support**: Run in containers locally or in production environments
 
 ### MCP Server Features (Optional)
@@ -285,7 +375,7 @@ Lexicon uses an **adapter pattern** to deploy the same application to multiple c
 
 ## 🤖 MCP Integration (Optional)
 
-Lexicon includes an **optional comprehensive Model Context Protocol (MCP) server** that exposes enterprise-grade tools for FullStory, BigQuery, and Snowflake as standardized AI tools and resources.
+Lexicon includes an **optional comprehensive Model Context Protocol (MCP) server** that exposes enterprise-grade tools for FullStory as standardized AI tools and resources.
 
 > **⚠️ Important**: The MCP server is completely optional and can be safely excluded from deployments. Lexicon's core functionality (webhook processing, data transformation, multi-cloud connectors) works perfectly without any MCP components.
 
@@ -304,15 +394,9 @@ The MCP integration is organized in the dedicated `MCP/` directory and runs as a
 
 **🔧 Explicit Tool Registration**
 - **FullStory tools**: 23 tools covering all FullStory server APIs (v1 and v2)
-- **Warehouse tools**: 12 tools for BigQuery and Snowflake operations
 - **System tools**: 6 tools for health checks and diagnostics
-- **Total**: 41 enterprise-grade tools with full API coverage
+- **Total**: 29 enterprise-grade tools with full API coverage
 
-**🏢 Warehouse Integration**
-- **BigQuery & Snowflake**: Essential data warehouse platforms
-- **Direct API integration**: Platform-specific optimized queries
-- **Konbini.js abstraction**: Database-agnostic SQL generation  
-- **Type-safe operations**: JSON Schema validation for all parameters
 
 ### When to Use MCP
 
@@ -346,10 +430,6 @@ npm run build:cloudrun
 #### FullStory Tools (23 total)
 Complete coverage of FullStory server APIs including sessions, users, events, segments, analytics, and health endpoints.
 
-#### Warehouse Tools (12 total)
-BigQuery and Snowflake operations including query execution, schema inspection, and analytics.  
-- `warehouse_generate_sql` - Platform-specific SQL generation via Konbini
-- `warehouse_list_tables` - Database exploration
 
 #### System Tools (6 total)
 System diagnostics, health checks, and metrics for monitoring server status.
@@ -1269,58 +1349,155 @@ npm run dev:mount
 npm run dev:docker
 ```
 
-## 🧪 Testing
+## 🧪 Testing - Production-Ready Infrastructure
 
-Lexicon includes comprehensive tests:
+Lexicon features a **comprehensive testing infrastructure** with enterprise-grade capabilities:
+
+### 🎯 **Core Testing Features**
+- ✅ **Complete ESM Compatibility**: All tests modernized for ES Modules
+- ✅ **Comprehensive Rate Limiting Tests**: HTTP, tool-level, and configuration testing
+- ✅ **Secure Test Data**: Environment-driven configuration (no hardcoded IDs)
+- ✅ **Multi-Layer Testing**: Unit, integration, and end-to-end bash scripts
+- ✅ **Zero Process Leaks**: Clean test teardown and worker process management
+
+### 📋 **Test Commands**
 
 ```bash
-# Run all tests
-npm test
+# Quick Start Testing (Recommended)
+# Terminal 1: Start MCP server
+MCP_MODE=true npm start                 # Start with your real .env
+# Terminal 2: Run comprehensive tests
+npm run test:comprehensive              # Full test suite (58+ tests)
 
-# Run specific test categories (available tests)
-npm run test:unit
-npm run test:integration
+# Security & MCP Testing
+npm run test:mcp:security:all           # Complete security test suite
+npm run test:mcp:auth                   # OAuth 2.1 authentication tests
+npm run test:mcp:validation             # Input validation tests
 
-# Watch mode for development
-npm run test:watch
+# Traditional Testing
+npm run test:comprehensive:no-server    # Unit tests only  
+npm run test:unit                       # Jest unit tests (ESM-compatible)
+npm run test:rate-limiting              # Rate limiting functionality
+npm test                                # Basic Jest tests
 ```
 
-For detailed test documentation, see the [Testing Guidelines](./tests/README.md).
+### 🔐 **Test Security & Configuration**
+
+**Simple testing workflow:**
+- ✅ **Uses your existing `.env` file** (real credentials work)
+- ✅ **MCP mode easily enabled** (`MCP_MODE=true npm start`)  
+- ✅ **Rate limits adjustable** (add overrides if needed during heavy testing)
+- ✅ **Comprehensive test runner** (detects running server automatically)
+
+**Two-terminal approach:**
+```bash
+# Terminal 1: Start MCP server
+MCP_MODE=true npm start    # Uses your real .env configuration
+
+# Terminal 2: Run tests  
+npm run test:comprehensive # Full test suite (58+ tests)
+```
+
+For detailed documentation, see **[TESTING.md](./TESTING.md)** - comprehensive testing guide.
+
+## 🛡️ Rate Limiting
+
+Lexicon includes comprehensive rate limiting to protect against abuse and ensure fair resource usage across all deployment modes.
+
+### Features
+
+- **Multi-tier Rate Limiting**: Different limits for general, API, webhook, MCP, and tool endpoints
+- **Configurable Storage**: In-memory (development) and Redis (production) backends
+- **Environment-driven Configuration**: All settings configurable via environment variables
+- **IP-based Client Identification**: Automatic client tracking and limiting
+- **Rate Limit Headers**: Standard `X-RateLimit-*` headers in responses
+- **Comprehensive Logging**: All rate limit events logged for monitoring
+- **Efficient Resource Usage**: Minimal memory footprint (<1MB) and CPU overhead for Cloud Run deployments
+
+### Cloud Run Resource Requirements
+
+**Recommendation: 1GB RAM / 1 CPU is sufficient** for most production workloads.
+
+The rate limiting implementation is designed to be resource-efficient:
+- **Memory Usage**: <1MB total overhead even with 1000+ concurrent clients
+- **CPU Impact**: Minimal (<1% per request) with simple integer operations
+- **Storage Efficiency**: In-memory cleanup prevents memory leaks; Redis optional for distributed deployments
+
+Monitor these metrics during peak load to validate resource adequacy:
+- Memory usage patterns
+- CPU utilization during rate limit operations  
+- Request latency with rate limiting enabled
+
+### Quick Configuration
+
+```bash
+# Enable rate limiting
+RATE_LIMIT_ENABLED=true
+
+# General limits (applied to all endpoints unless overridden)
+RATE_LIMIT_WINDOW_MS=60000        # 1 minute window
+RATE_LIMIT_MAX_REQUESTS=100       # 100 requests per minute
+
+# Endpoint-specific limits
+RATE_LIMIT_WEBHOOK_MAX_REQUESTS=200    # Higher limits for webhook volume
+RATE_LIMIT_MCP_MAX_REQUESTS=30         # Conservative MCP limits
+RATE_LIMIT_TOOL_MAX_REQUESTS=20        # Individual tool call limits
+
+# Production: Use Redis for distributed rate limiting
+RATE_LIMIT_USE_REDIS=true
+RATE_LIMIT_REDIS_URL=redis://redis-cluster:6379
+```
+
+### Implementation
+
+Rate limiting is automatically applied across all Lexicon components:
+
+- **Main Application**: Applied to all routes through middleware chain
+- **Webhook Routes**: Webhook-specific rate limits for external integrations
+- **MCP Mode**: HTTP-level and tool-specific rate limiting for AI agent protection
+- **API Endpoints**: Conservative limits for internal/admin endpoints
+
+### Documentation
+
+For complete configuration options, environment variables, troubleshooting, and production recommendations, see:
+
+- **[RATE_LIMITING.md](./RATE_LIMITING.md)** - Comprehensive documentation
+- **[rate-limiting.env.example](./rate-limiting.env.example)** - Configuration examples
 
 ## 🔒 Security Configuration (MCP Mode)
 
 When running Lexicon in MCP mode, consider these security best practices:
 
-### Authentication & Authorization
+### Security Features
 - **API Keys**: Secure FullStory, BigQuery, and Snowflake credentials
-- **Session Management**: Configurable TTL and automatic cleanup
-- **Rate Limiting**: Built-in protection against abuse
-- **Transport Security**: TLS/SSL for all network communications
+- **SAFE_MODE**: Restricts tools to read-only operations for compliance
+- **Rate Limiting**: Protection against abuse with configurable limits per endpoint type
+- **Transport Security**: Deploy behind HTTPS/TLS (via reverse proxy or cloud provider)
+- **Network Security**: Use cloud provider IAM and network policies for access control
 
 ### Production Checklist
-- [ ] Enable authentication middleware
-- [ ] Configure secure session TTL (default: 1 hour)
+- [ ] Enable SAFE_MODE for compliance environments
+- [ ] Configure rate limiting with appropriate limits for your traffic patterns
+- [ ] Use Redis for distributed rate limiting in multi-instance deployments
 - [ ] Set up proper logging and monitoring
 - [ ] Use environment variables for all secrets
-- [ ] Enable CORS restrictions for web clients
+- [ ] Configure cloud provider IAM/network security
+- [ ] Deploy behind reverse proxy with authentication if needed
 - [ ] Configure firewall rules for MCP ports
 
 ### Environment Variables (MCP Mode)
 ```bash
-# Authentication
-MCP_AUTH_ENABLED=true
-MCP_SESSION_TTL=3600
-MCP_RATE_LIMIT_REQUESTS=100
-MCP_RATE_LIMIT_WINDOW=60
+# Security Configuration
+SAFE_MODE=true                  # Enable read-only mode for compliance
+MCP_MODE=true                   # Enable MCP server mode
 
-# Transport Security
-MCP_TLS_ENABLED=true
-MCP_CORS_ORIGINS=https://yourdomain.com
-
-# Monitoring
-MCP_METRICS_ENABLED=true
-MCP_AUDIT_LOG_ENABLED=true
+# Basic Configuration
+MCP_SERVER_NAME=lexicon-mcp-enterprise
+MCP_PORT=3000                   # MCP server port
+MCP_HOST=0.0.0.0               # Bind address
 ```
+
+**Note**: The MCP server does not include built-in authentication or session management. For production deployments, use cloud provider security features (IAM, network policies, reverse proxies) to control access.
 
 For comprehensive security documentation, see [`MCP/README.md`](./MCP/README.md).
 

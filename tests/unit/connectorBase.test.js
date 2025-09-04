@@ -2,13 +2,15 @@
  * Unit tests for ConnectorBase class
  */
 
+import { jest } from '@jest/globals';
+
 // Mock modules for ESM
 const mockRegisterComponent = jest.fn();
 const mockRegisterConnector = jest.fn(); 
 const mockMarkInitialized = jest.fn();
 const mockMarkFailed = jest.fn();
 
-jest.mock('../../initialization.js', () => ({
+jest.unstable_mockModule('../../initialization.js', () => ({
   default: {
     registerComponent: mockRegisterComponent,
     registerConnector: mockRegisterConnector,
@@ -17,7 +19,7 @@ jest.mock('../../initialization.js', () => ({
   }
 }));
 
-jest.mock('../../serviceRegistry.js', () => ({
+jest.unstable_mockModule('../../serviceRegistry.js', () => ({
   default: {
     get: jest.fn().mockImplementation(() => ({
       registerComponent: mockRegisterComponent,
@@ -30,7 +32,7 @@ jest.mock('../../serviceRegistry.js', () => ({
   }
 }));
 
-jest.mock('../../loggerFramework.js', () => ({
+jest.unstable_mockModule('../../loggerFramework.js', () => ({
   Logger: jest.fn().mockImplementation(() => ({
     info: jest.fn(),
     warn: jest.fn(),
@@ -40,14 +42,14 @@ jest.mock('../../loggerFramework.js', () => ({
   }))
 }));
 
-jest.mock('../../errorHandler.js', () => ({
+jest.unstable_mockModule('../../errorHandler.js', () => ({
   createErrorHandler: jest.fn().mockImplementation(() => ({
     handleError: jest.fn(),
     logError: jest.fn()
   }))
 }));
 
-jest.mock('../../connectorConfigValidator.js', () => ({
+jest.unstable_mockModule('../../connectorConfigValidator.js', () => ({
   default: jest.fn().mockImplementation(() => ({
     validateConnection: jest.fn(),
     validateConfig: jest.fn(),
@@ -55,10 +57,12 @@ jest.mock('../../connectorConfigValidator.js', () => ({
   }))
 }));
 
-import ConnectorBase from '../../connectorBase.js';
-import { Logger } from '../../loggerFramework.js';
-import { createErrorHandler } from '../../errorHandler.js';
-import ConnectorConfigValidator from '../../connectorConfigValidator.js';
+// Import modules after mocks are set up
+const { default: ConnectorBase } = await import('../../connectorBase.js');
+const { Logger } = await import('../../loggerFramework.js');
+const { createErrorHandler } = await import('../../errorHandler.js');
+const { default: ConnectorConfigValidator } = await import('../../connectorConfigValidator.js');
+const { default: serviceRegistry } = await import('../../serviceRegistry.js');
 
 describe('ConnectorBase', () => {
   let connector;

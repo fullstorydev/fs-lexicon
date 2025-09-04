@@ -40,6 +40,7 @@ class Configuration {
       cloud_provider: (process.env.CLOUD_PROVIDER || 'GCP').toUpperCase(),
       port: process.env.PORT || 8080,
       debug_patterns: process.env.DEBUG || 'lexicon:*',
+      log_level: process.env.LOG_LEVEL,
       
       // API Keys and Authentication
       fs_org_api_key: process.env.ORG_API_KEY,
@@ -57,7 +58,7 @@ class Configuration {
       jira_username: process.env.JIRA_USERNAME,
       jira_project_id: process.env.JIRA_PROJECT_ID,
       jira_issue_type_id: process.env.JIRA_ISSUE_TYPE_ID,
-      jira_session_field_id: process.env.JIRA_SESSION_FIELD_ID || 'customfield_10916',
+      jira_session_field_id: process.env.JIRA_SESSION_FIELD_ID || 'customfield_XXXXX',
       
       // Snowflake Configuration
       snowflake_account_identifier: process.env.SNOWFLAKE_ACCOUNT_IDENTIFIER,
@@ -73,7 +74,49 @@ class Configuration {
       google_workspace_keyfile: process.env.GOOGLE_WORKSPACE_KEY_FILE,
       google_sheets_id: process.env.GOOGLE_WORKSPACE_SHEET_ID,
       google_sheets_range: process.env.GOOGLE_SHEETS_RANGE || 'Sheet1',
-      bigquery_keyfile: process.env.BIGQUERY_KEYFILE
+      bigquery_keyfile: process.env.BIGQUERY_KEYFILE,
+      
+      // Rate Limiting Configuration
+      rate_limit_enabled: process.env.RATE_LIMIT_ENABLED,
+      rate_limit_window_ms: process.env.RATE_LIMIT_WINDOW_MS,
+      rate_limit_max_requests: process.env.RATE_LIMIT_MAX_REQUESTS,
+      rate_limit_api_window_ms: process.env.RATE_LIMIT_API_WINDOW_MS,
+      rate_limit_api_max_requests: process.env.RATE_LIMIT_API_MAX_REQUESTS,
+      rate_limit_webhook_window_ms: process.env.RATE_LIMIT_WEBHOOK_WINDOW_MS,
+      rate_limit_webhook_max_requests: process.env.RATE_LIMIT_WEBHOOK_MAX_REQUESTS,
+      rate_limit_mcp_window_ms: process.env.RATE_LIMIT_MCP_WINDOW_MS,
+      rate_limit_mcp_max_requests: process.env.RATE_LIMIT_MCP_MAX_REQUESTS,
+      rate_limit_tool_window_ms: process.env.RATE_LIMIT_TOOL_WINDOW_MS,
+      rate_limit_tool_max_requests: process.env.RATE_LIMIT_TOOL_MAX_REQUESTS,
+      rate_limit_use_redis: process.env.RATE_LIMIT_USE_REDIS,
+      rate_limit_redis_url: process.env.RATE_LIMIT_REDIS_URL,
+      
+      // MCP Configuration
+      mcp_mode: process.env.MCP_MODE,
+      mcp_url: process.env.MCP_URL || 'http://localhost:8080/mcp',
+      mcp_debug: process.env.MCP_DEBUG,
+      lexicon_url: process.env.LEXICON_URL || 'http://localhost:8080',
+      mcp_auth_enabled: process.env.MCP_AUTH_ENABLED,
+      mcp_auth_server_url: process.env.MCP_AUTH_SERVER_URL,
+      mcp_server_canonical_uri: process.env.MCP_SERVER_CANONICAL_URI,
+      mcp_auth_client_id: process.env.MCP_AUTH_CLIENT_ID,
+      mcp_auth_client_secret: process.env.MCP_AUTH_CLIENT_SECRET,
+      mcp_auth_allow_dynamic_registration: process.env.MCP_AUTH_ALLOW_DYNAMIC_REGISTRATION,
+      mcp_auth_token_cache_time: process.env.MCP_AUTH_TOKEN_CACHE_TIME,
+      mcp_auth_require_audience_validation: process.env.MCP_AUTH_REQUIRE_AUDIENCE_VALIDATION,
+      mcp_auth_max_token_age: process.env.MCP_AUTH_MAX_TOKEN_AGE,
+      mcp_auth_rate_limit_by_token: process.env.MCP_AUTH_RATE_LIMIT_BY_TOKEN,
+      
+      // Test Configuration
+      test_fullstory_user_id: process.env.TEST_FULLSTORY_USER_ID || 'demo_user_id',
+      test_fullstory_session_id: process.env.TEST_FULLSTORY_SESSION_ID || 'demo_session_id',
+      test_bigquery_project_id: process.env.TEST_BIGQUERY_PROJECT_ID || 'demo-project',
+      test_bigquery_dataset: process.env.TEST_BIGQUERY_DATASET || 'demo_dataset',
+      test_bigquery_table: process.env.TEST_BIGQUERY_TABLE || 'demo_table',
+      skip_real_data_tests: process.env.SKIP_REAL_DATA_TESTS || 'true',
+      
+      // Security Settings
+      safe_mode: process.env.SAFE_MODE || 'false'
     };
     
     // Environment-specific overrides

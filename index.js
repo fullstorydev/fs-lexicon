@@ -88,6 +88,7 @@ export class CloudAdapter {
 
     this.middlewares = [
       express.json(),
+      middleware.createRateLimit(), // Add rate limiting
       middleware.logRequest, // Add consistent request logging
       middleware.verifyWebHook
     ];
@@ -218,7 +219,11 @@ export class GCPAdapter extends CloudAdapter {
       // Only start the server if this is the main module
       if (import.meta.url === `file://${process.argv[1]}`) {
         this.app.listen(port, () => {
-          console.log(`Cloud Run service listening on port ${port}`);
+          this.logger.info(`Cloud Run service listening on port ${port}`, {
+            port: port,
+            provider: 'GCP',
+            mode: 'Cloud Run'
+          });
         });
       }
       
@@ -268,7 +273,10 @@ export class AzureAdapter extends CloudAdapter {
         this.azureApp = app;
         this.routes = [];
       } catch (error) {
-        console.error('Failed to initialize Azure Functions SDK:', error);
+        this.logger.error('Failed to initialize Azure Functions SDK', {
+          error: error.message,
+          stack: error.stack
+        });
         throw new Error('Azure Functions SDK initialization failed');
       }
     }
@@ -305,7 +313,11 @@ export class AzureAdapter extends CloudAdapter {
       // Only start the server if this is the main module
       if (import.meta.url === `file://${process.argv[1]}`) {
         this.app.listen(port, () => {
-          console.log(`Azure App Service listening on port ${port}`);
+          this.logger.info(`Azure App Service listening on port ${port}`, {
+            port: port,
+            provider: 'AZURE',
+            mode: 'App Service'
+          });
         });
       }
       
@@ -426,7 +438,11 @@ export class AWSAdapter extends CloudAdapter {
       // Only start the server if this is the main module
       if (import.meta.url === `file://${process.argv[1]}`) {
         this.app.listen(port, () => {
-          console.log(`AWS service listening on port ${port}`);
+          this.logger.info(`AWS service listening on port ${port}`, {
+            port: port,
+            provider: 'AWS',
+            mode: 'App Runner/Lambda'
+          });
         });
       }
       

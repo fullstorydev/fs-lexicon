@@ -1,64 +1,106 @@
 /**
  * Integration tests for webhook routes
  */
-const express = require('express');
-const request = require('supertest');
-const WebhookRouter = require('../../webhookRouter');
-const Slack = require('../../Slack');
-const Fullstory = require('../../Fullstory');
-const config = require('../../config');
+
+import { jest } from '@jest/globals';
+import express from 'express';
+import request from 'supertest';
 
 // Mock dependencies
-jest.mock('../../Slack', () => ({
-  sendWebHook: jest.fn().mockResolvedValue({ ok: true }),
-  sendAIWebHook: jest.fn().mockResolvedValue({ ok: true })
+jest.unstable_mockModule('../../Slack.js', () => ({
+  default: {
+    sendWebHook: jest.fn().mockResolvedValue({ ok: true }),
+    sendAIWebHook: jest.fn().mockResolvedValue({ ok: true })
+  }
 }));
 
-jest.mock('../../Fullstory', () => ({
-  getSessionLink: jest.fn().mockReturnValue('https://app.fullstory.com/ui/session/123'),
-  getSessionSummary: jest.fn().mockResolvedValue({
-    analysis: 'Mock session summary'
-  }),
-  postCustomEvent: jest.fn().mockResolvedValue({ status: 200 })
+jest.unstable_mockModule('../../Fullstory.js', () => ({
+  default: {
+    getSessionLink: jest.fn().mockReturnValue('https://app.fullstory.com/ui/session/123'),
+    getSessionSummary: jest.fn().mockResolvedValue({
+      analysis: 'Mock session summary'
+    }),
+    postCustomEvent: jest.fn().mockResolvedValue({ status: 200 })
+  }
 }));
 
-jest.mock('../../GoogleCloud', () => ({
-  workspace: {
-    appendSpreadsheetValues: jest.fn().mockResolvedValue({
-      updates: {
-        updatedRange: 'Sheet1!A1:J1',
-        updatedRows: 1,
-        updatedColumns: 10,
-        updatedCells: 10  // Add this property to match what the handler checks for
-      }
+jest.unstable_mockModule('../../GoogleCloud.js', () => ({
+  default: {
+    workspace: {
+      appendSpreadsheetValues: jest.fn().mockResolvedValue({
+        updates: {
+          updatedRange: 'Sheet1!A1:J1',
+          updatedRows: 1,
+          updatedColumns: 10,
+          updatedCells: 10
+        }
+      })
+    }
+  }
+}));
+
+jest.unstable_mockModule('../../Atlassian.js', () => ({
+  default: {
+    createTicket: jest.fn().mockResolvedValue({
+      id: '12345',
+      key: 'TEST-123'
+    }),
+    jira_base_url: 'https://test-jira.atlassian.net'
+  }
+}));
+
+jest.unstable_mockModule('../../config.js', () => ({
+  default: {
+    get: jest.fn().mockImplementation((key, defaultValue = null) => {
+      const configValues = {
+        'slack_webhook_url': 'https://slack.webhook/test',
+        'fullstory_token': 'test-token',
+        'fullstory_org_id': 'test-org-id',
+        'fs_org_api_key': 'test-api-key',
+        'google_sheets_range': 'Sheet1',
+        'google_sheets_id': 'test-sheet-id',
+        'jira_project_key': 'TEST',
+        'jira_issue_type_id': '10001',
+        'jira_session_field_id': 'custom-123'
+      };
+      return configValues[key] || defaultValue;
+    }),
+    getBoolean: jest.fn().mockImplementation((key, defaultValue = false) => {
+      const booleanValues = {
+        'rate_limit_enabled': false, // Disable rate limiting for tests
+        'rate_limit_use_redis': false,
+        'rate_limit_skip_successful': false,
+        'rate_limit_skip_failed': false,
+        'rate_limit_include_headers': true,
+        'rate_limit_trust_proxy': false
+      };
+      return booleanValues[key] !== undefined ? booleanValues[key] : defaultValue;
+    }),
+    getNumber: jest.fn().mockImplementation((key, defaultValue = 0) => {
+      const numberValues = {
+        'rate_limit_window_ms': 60000,
+        'rate_limit_max_requests': 100,
+        'rate_limit_api_window_ms': 60000,
+        'rate_limit_api_max_requests': 50,
+        'rate_limit_webhook_window_ms': 60000,
+        'rate_limit_webhook_max_requests': 200,
+        'rate_limit_mcp_window_ms': 60000,
+        'rate_limit_mcp_max_requests': 30,
+        'rate_limit_tool_window_ms': 60000,
+        'rate_limit_tool_max_requests': 20
+      };
+      return numberValues[key] !== undefined ? numberValues[key] : defaultValue;
     })
   }
 }));
 
-jest.mock('../../Atlassian', () => ({
-  createTicket: jest.fn().mockResolvedValue({
-    id: '12345',
-    key: 'TEST-123'
-  }),
-  jira_base_url: 'https://test-jira.atlassian.net'
-}));
-
-jest.mock('../../config', () => ({
-  get: jest.fn().mockImplementation((key) => {
-    const configValues = {
-      'slack_webhook_url': 'https://slack.webhook/test',
-      'fullstory_token': 'test-token',
-      'fullstory_org_id': 'test-org-id',
-      'fs_org_api_key': 'test-api-key',
-      'google_sheets_range': 'Sheet1',
-      'google_sheets_id': 'test-sheet-id',
-      'jira_project_key': 'TEST',
-      'jira_issue_type_id': '10001',
-      'jira_session_field_id': 'custom-123'
-    };
-    return configValues[key] || null;
-  })
-}));
+// Import modules after mocks are set up
+const { default: WebhookRouter } = await import('../../webhookRouter.js');
+const { default: Slack } = await import('../../Slack.js');
+const { default: Fullstory } = await import('../../Fullstory.js');
+const { default: GoogleCloud } = await import('../../GoogleCloud.js');
+const { default: Atlassian } = await import('../../Atlassian.js');
+const { default: config } = await import('../../config.js');
 
 describe('Webhook Integration', () => {
   let app;
@@ -202,10 +244,8 @@ describe('Webhook Integration', () => {
   // Google Sheets webhook
   describe('Google Sheets Webhook Route', () => {
     it('should handle valid google sheets webhook request', async () => {
-      const googleCloud = require('../../GoogleCloud');
-      
       // Make sure GoogleCloud has the expected configuration
-      googleCloud.workspace.config = { sheets_id: 'test-sheet-id' };
+      GoogleCloud.workspace.config = { sheets_id: 'test-sheet-id' };
       
       const payload = {
         name: 'sheets_event',
@@ -229,14 +269,12 @@ describe('Webhook Integration', () => {
       
       // Update expectation to match actual implementation
       expect(response.status).toBe(204);
-      expect(googleCloud.workspace.appendSpreadsheetValues).toHaveBeenCalled();
+      expect(GoogleCloud.workspace.appendSpreadsheetValues).toHaveBeenCalled();
     });
     
     it('should handle google sheets configuration errors', async () => {
-      const googleCloud = require('../../GoogleCloud');
-      
-      const originalConfig = googleCloud.workspace.config;
-      googleCloud.workspace.config = {};
+      const originalConfig = GoogleCloud.workspace.config;
+      GoogleCloud.workspace.config = {};
       
       const payload = {
         name: 'sheets_config_error',
@@ -253,19 +291,18 @@ describe('Webhook Integration', () => {
         .set('Accept', 'application/json');
       
       // Restore the original config
-      googleCloud.workspace.config = originalConfig;
+      GoogleCloud.workspace.config = originalConfig;
       
       // The implementation returns 500 when configuration is missing
       expect(response.status).toBe(500);
       expect(response.body).toHaveProperty('error');
-      expect(googleCloud.workspace.appendSpreadsheetValues).not.toHaveBeenCalled();
+      expect(GoogleCloud.workspace.appendSpreadsheetValues).not.toHaveBeenCalled();
     });
   });
   
   // Jira webhook
   describe('Jira Webhook Route', () => {
     it('should handle valid jira ticket creation webhook', async () => {
-      const Atlassian = require('../../Atlassian');
       
       const payload = {
         name: 'create_jira',

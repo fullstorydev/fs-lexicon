@@ -71,15 +71,27 @@ class WebhookRouter extends WebhookBase {
    * @private
    */
   configureRoutes() {
+    // Apply webhook rate limiting to all routes
+    const webhookRateLimit = middleware.createWebhookRateLimit();
+
     // Basic Slack webhook
-    this.router.post("/slackHook", this.jsonParser, this.handleSlackHook.bind(this));
+    this.router.post("/slackHook", 
+      this.jsonParser, 
+      webhookRateLimit,
+      this.handleSlackHook.bind(this)
+    );
 
     // AI-specific Slack webhook
-    this.router.post("/slackHookAI", this.jsonParser, this.handleSlackHookAI.bind(this));
+    this.router.post("/slackHookAI", 
+      this.jsonParser, 
+      webhookRateLimit,
+      this.handleSlackHookAI.bind(this)
+    );
 
     // Google Sheets webhook
     this.router.post("/googlesheets", 
       this.jsonParser, 
+      webhookRateLimit,
       middleware.validateJsonFields(['user']),
       this.handleGoogleSheets.bind(this)
     );
@@ -87,6 +99,7 @@ class WebhookRouter extends WebhookBase {
     // Jira ticket creation webhook
     this.router.post("/makeJiraTicket", 
       this.jsonParser,
+      webhookRateLimit,
       middleware.validateJsonFields(['user', 'name']),
       this.handleJiraTicket.bind(this)
     );
@@ -94,6 +107,7 @@ class WebhookRouter extends WebhookBase {
     // Fullstory Fusion webhook
     this.router.post("/fusion", 
       this.jsonParser,
+      webhookRateLimit,
       middleware.validateJsonFields(['user']),
       this.handleFusion.bind(this)
     );
@@ -101,6 +115,7 @@ class WebhookRouter extends WebhookBase {
     // Snowflake data update webhook
     this.router.post("/updateSnowflake",
       this.jsonParser,
+      webhookRateLimit,
       middleware.validateJsonFields(['user', 'properties']),
       this.handleSnowflakeUpdate.bind(this)
     );
@@ -108,6 +123,7 @@ class WebhookRouter extends WebhookBase {
     // BigQuery data update webhook
     this.router.post("/updateBigQuery",
       this.jsonParser,
+      webhookRateLimit,
       middleware.validateJsonFields(['user', 'properties']),
       this.handleBigQueryUpdate.bind(this)
     );
@@ -356,7 +372,7 @@ class WebhookRouter extends WebhookBase {
       // Get configuration values with proper error handling
       const projectKey = config.get('jira_project_key');
       const issueTypeId = config.get('jira_issue_type_id');
-      const customFieldId = config.get('jira_session_field_id', 'customfield_10916');
+      const customFieldId = config.get('jira_session_field_id', 'customfield_XXXXX');
       
       if (!projectKey || !issueTypeId) {
         this.logger.error('Missing required Jira configuration', {

@@ -7,6 +7,8 @@
  */
 
 import fullstoryConnector from '../../Fullstory.js';
+import { inputValidator } from '../validation/inputValidator.js';
+import config from '../../config.js';
 
 // --- TOOL SCHEMAS (aligned with Fullstory.js) ---
 const fullstoryTools = [
@@ -517,7 +519,7 @@ const fullstoryTools = [
 ];
 
 // --- SAFE_MODE logic ---
-const SAFE_MODE = process.env.SAFE_MODE === 'true';
+const SAFE_MODE = config.getBoolean('safe_mode', false);
 const SAFE_TOOL_NAMES = [
   'fullstory_get_profile',
   'fullstory_list_session_profiles',
@@ -548,6 +550,25 @@ async function fullstoryDispatcher(request) {
       isError: true,
     };
   }
+
+  // Find the tool schema for validation
+  const toolSchema = fullstoryTools.find(tool => tool.name === name)?.inputSchema;
+  
+  // Validate and sanitize input arguments
+  const validation = inputValidator.validateToolArguments(name, args, toolSchema);
+  if (!validation.isValid) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Input validation failed: ${validation.errors.join('; ')}`
+      }],
+      isError: true,
+      _validationErrors: validation.errors
+    };
+  }
+  
+  // Use sanitized arguments for processing
+  const sanitizedArgs = validation.sanitizedArgs;
   function asPrettyText(obj) {
     // Return human-readable, pretty-printed text for objects, else string
     if (typeof obj === 'string') return obj;
@@ -559,7 +580,7 @@ async function fullstoryDispatcher(request) {
   }
   switch (name) {
     case 'fullstory_get_profile': {
-      const result = await fullstoryConnector.getSessionProfile(args);
+      const result = await fullstoryConnector.getSessionProfile(sanitizedArgs);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -568,7 +589,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_list_session_profiles': {
-      const result = await fullstoryConnector.listSessionProfiles(args);
+      const result = await fullstoryConnector.listSessionProfiles(sanitizedArgs);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -579,9 +600,9 @@ async function fullstoryDispatcher(request) {
     case 'fullstory_get_session_insights': {
       // Ensure outputMode parameter is properly passed through
       const insightsArgs = {
-        user_id: args.user_id,
-        session_id: args.session_id,
-        outputMode: args.outputMode || 'default'
+        user_id: sanitizedArgs.user_id,
+        session_id: sanitizedArgs.session_id,
+        outputMode: sanitizedArgs.outputMode || 'default'
       };
       const result = await fullstoryConnector.getSessionInsights(insightsArgs);
       return {
@@ -592,7 +613,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_update_profile': {
-      const result = await fullstoryConnector.updateSessionProfile(args);
+      const result = await fullstoryConnector.updateSessionProfile(sanitizedArgs);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -601,7 +622,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_delete_profile': {
-      const result = await fullstoryConnector.deleteSessionProfile(args);
+      const result = await fullstoryConnector.deleteSessionProfile(sanitizedArgs);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -610,7 +631,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_generate_session_context': {
-      const result = await fullstoryConnector.generateSessionContext(args.session_id, args.options || {});
+      const result = await fullstoryConnector.generateSessionContext(sanitizedArgs.session_id, sanitizedArgs.options || {});
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -619,7 +640,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_generate_context': {
-      const result = await fullstoryConnector.generateSessionContext(args.session_id, args.options || {});
+      const result = await fullstoryConnector.generateSessionContext(sanitizedArgs.session_id, sanitizedArgs.options || {});
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -628,7 +649,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_generate_session_summary': {
-      const result = await fullstoryConnector.getSessionSummary(args.user_id, args.session_id, args.config_profile);
+      const result = await fullstoryConnector.getSessionSummary(sanitizedArgs.user_id, sanitizedArgs.session_id, sanitizedArgs.config_profile);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -637,7 +658,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_get_session_events': {
-      const result = await fullstoryConnector.getSessionEvents(args.user_id, args.session_id);
+      const result = await fullstoryConnector.getSessionEvents(sanitizedArgs.user_id, sanitizedArgs.session_id);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -646,7 +667,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_create_user': {
-      const result = await fullstoryConnector.createUser(args);
+      const result = await fullstoryConnector.createUser(sanitizedArgs);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -655,7 +676,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_get_user': {
-      const result = await fullstoryConnector.getUser(args.userId);
+      const result = await fullstoryConnector.getUser(sanitizedArgs.userId);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -664,7 +685,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_update_user': {
-      const result = await fullstoryConnector.updateUser(args.userId, args.updates);
+      const result = await fullstoryConnector.updateUser(sanitizedArgs.userId, sanitizedArgs.updates);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -673,7 +694,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_delete_user': {
-      const result = await fullstoryConnector.deleteUser(args.userId);
+      const result = await fullstoryConnector.deleteUser(sanitizedArgs.userId);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -682,7 +703,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_create_users_batch': {
-      const result = await fullstoryConnector.createUsersBatch(args.users);
+      const result = await fullstoryConnector.createUsersBatch(sanitizedArgs.users);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -691,7 +712,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_create_event': {
-      const result = await fullstoryConnector.createEvent(args);
+      const result = await fullstoryConnector.createEvent(sanitizedArgs);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -700,7 +721,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_create_events_batch': {
-      const result = await fullstoryConnector.createEventsBatch(args.events);
+      const result = await fullstoryConnector.createEventsBatch(sanitizedArgs.events);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -709,7 +730,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_get_batch_job_status': {
-      const result = await fullstoryConnector.getBatchJobStatus(args.jobId);
+      const result = await fullstoryConnector.getBatchJobStatus(sanitizedArgs.jobId);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -718,7 +739,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_get_batch_job_errors': {
-      const result = await fullstoryConnector.getBatchJobErrors(args.jobId);
+      const result = await fullstoryConnector.getBatchJobErrors(sanitizedArgs.jobId);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -727,7 +748,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_create_annotation': {
-      const result = await fullstoryConnector.createAnnotation(args);
+      const result = await fullstoryConnector.createAnnotation(sanitizedArgs);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -736,7 +757,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_list_sessions': {
-      const result = await fullstoryConnector.listSessions(args);
+      const result = await fullstoryConnector.listSessions(sanitizedArgs);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -745,7 +766,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_set_user_properties_v1': {
-      const result = await fullstoryConnector.setUserPropertiesV1(args.uid, args.properties, args.options);
+      const result = await fullstoryConnector.setUserPropertiesV1(sanitizedArgs.uid, sanitizedArgs.properties, sanitizedArgs.options);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -754,7 +775,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_set_user_events_v1': {
-      const result = await fullstoryConnector.setUserEventsV1(args.uid, args.events);
+      const result = await fullstoryConnector.setUserEventsV1(sanitizedArgs.uid, sanitizedArgs.events);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -763,7 +784,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_create_segment_export': {
-      const result = await fullstoryConnector.createSegmentExport(args);
+      const result = await fullstoryConnector.createSegmentExport(sanitizedArgs);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -772,7 +793,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_get_segment_export_status': {
-      const result = await fullstoryConnector.getSegmentExportStatus(args.exportId);
+      const result = await fullstoryConnector.getSegmentExportStatus(sanitizedArgs.exportId);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -790,7 +811,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_get_user_events': {
-      const result = await fullstoryConnector.getUserEvents(args.uid, args.options);
+      const result = await fullstoryConnector.getUserEvents(sanitizedArgs.uid, sanitizedArgs.options);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -799,7 +820,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_get_user_pages': {
-      const result = await fullstoryConnector.getUserPages(args.uid, args.options);
+      const result = await fullstoryConnector.getUserPages(sanitizedArgs.uid, sanitizedArgs.options);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -808,7 +829,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_get_user_profile': {
-      const result = await fullstoryConnector.getUserProfile(args.userIdentifier);
+      const result = await fullstoryConnector.getUserProfile(sanitizedArgs.userIdentifier);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -817,7 +838,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_get_user_analytics': {
-      const result = await fullstoryConnector.getUserAnalytics(args.userIdentifier, args.options);
+      const result = await fullstoryConnector.getUserAnalytics(sanitizedArgs.userIdentifier, sanitizedArgs.options);
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }

@@ -5,12 +5,45 @@
 
 import { Logger } from '../../loggerFramework.js';
 import serviceRegistry from '../../serviceRegistry.js';
+import initialization from '../../initialization.js';
 import os from 'os';
 import fs from 'fs';
 import { promisify } from 'util';
+import { inputValidator } from '../validation/inputValidator.js';
 
 const readFile = promisify(fs.readFile);
 const stat = promisify(fs.stat);
+
+// Create logger instance for system tools
+const logger = new Logger('SystemTools');
+
+/**
+ * Sanitize service details using the existing initialization sanitization logic
+ * plus additional MCP-specific sensitive fields
+ * @param {Object} details - Service initialization details
+ * @returns {Object} Sanitized details
+ */
+function sanitizeServiceDetails(details) {
+  // First use the robust sanitization logic from initialization
+  let sanitized = initialization._sanitizeInitDetails(details);
+  
+  if (!sanitized || typeof sanitized !== 'object') {
+    return sanitized;
+  }
+  
+  // Additional fields that are sensitive for MCP tools but not necessarily for logging
+  const mcpSensitiveFields = ['datacenter', 'defaultSheet', 'warehouse', 'account'];
+  
+  // Remove additional MCP-specific sensitive fields
+  const finalSanitized = { ...sanitized };
+  mcpSensitiveFields.forEach(field => {
+    if (field in finalSanitized) {
+      delete finalSanitized[field];
+    }
+  });
+  
+  return finalSanitized;
+}
 
 const systemTools = [
   {
@@ -55,37 +88,35 @@ const systemTools = [
     description: 'Service Registry',
     inputSchema: { type: 'object', properties: {}, required: [] },
   },
-  {
-    name: 'system_get_logs',
-    description: 'System Logs',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        level: { type: 'string', enum: ['error', 'warn', 'info', 'debug'], default: 'info', description: 'Minimum log level' },
-        limit: { type: 'integer', minimum: 1, maximum: 1000, default: 100, description: 'Maximum number of log entries' },
-        service: { type: 'string', description: 'Filter by service name' },
-      },
-      required: [],
-    },
-  },
-  {
-    name: 'system_restart_service',
-    description: 'Restart Service',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        serviceName: { type: 'string', enum: ['fullstory', 'slack', 'snowflake'], description: 'Service to restart' },
-      },
-      required: ['serviceName'],
-    },
-  },
+
+
 ];
 
 async function systemDispatcher(request) {
   const { name, arguments: args } = request.params;
+  
+  // Find the tool schema for validation
+  const toolSchema = systemTools.find(tool => tool.name === name)?.inputSchema;
+  
+  // Validate and sanitize input arguments
+  const validation = inputValidator.validateToolArguments(name, args, toolSchema);
+  if (!validation.isValid) {
+    return {
+      content: [{
+        type: 'text',
+        text: `Input validation failed: ${validation.errors.join('; ')}`
+      }],
+      isError: true,
+      _validationErrors: validation.errors
+    };
+  }
+  
+  // Use sanitized arguments for processing
+  const sanitizedArgs = validation.sanitizedArgs;
+  
   switch (name) {
     case 'system_get_status': {
-      const { includeServices = true, includeEnvironment = false, includeMemoryDetails = true } = args || {};
+      const { includeServices = true, includeEnvironment = false, includeMemoryDetails = true } = sanitizedArgs || {};
       try {
         const status = {
           timestamp: new Date().toISOString(),
@@ -93,8 +124,7 @@ async function systemDispatcher(request) {
           nodeVersion: process.version,
           platform: process.platform,
           architecture: process.arch,
-          processId: process.pid,
-          workingDirectory: process.cwd(),
+          // Sensitive information removed for security
           memory: process.memoryUsage(),
         };
         if (includeMemoryDetails) {
@@ -107,29 +137,38 @@ async function systemDispatcher(request) {
           };
         }
         status.cpu = {
-          model: os.cpus()[0]?.model || 'Unknown',
+          // CPU model removed for security
           cores: os.cpus().length,
           loadAverage: os.loadavg(),
           uptime: os.uptime()
         };
-        status.network = Object.keys(os.networkInterfaces()).map(name => ({
-          name,
-          addresses: os.networkInterfaces()[name]?.map(addr => ({
-            address: addr.address,
-            family: addr.family,
-            internal: addr.internal
-          })) || []
-        }));
+        // Network interfaces removed for security
         if (includeServices) {
           status.services = {};
-          const services = ['fullstory', 'slack', 'snowflake'];
+          const services = ['fullstory', 'snowflake', 'bigQuery', 'googleWorkspace'];
           for (const serviceName of services) {
             if (serviceRegistry.has(serviceName)) {
               const service = serviceRegistry.get(serviceName);
+              
+              // Get initialization details like the main Lexicon does
+              let initDetails = {};
+              let serviceStatus = service.isConfigured ? 'configured' : 'not_configured';
+              
+              if (typeof service._initializeConnector === 'function') {
+                try {
+                  initDetails = await service._initializeConnector() || {};
+                  serviceStatus = initDetails.status || serviceStatus;
+                } catch (error) {
+                  serviceStatus = 'error';
+                  initDetails = { error: error.message };
+                }
+              }
+              
               status.services[serviceName] = {
                 available: true,
                 isConfigured: service.isConfigured || false,
-                status: service.status || 'unknown'
+                status: serviceStatus,
+                details: sanitizeServiceDetails(initDetails)
               };
             } else {
               status.services[serviceName] = {
@@ -157,7 +196,7 @@ async function systemDispatcher(request) {
           content: [{ type: 'text', text: JSON.stringify(status, null, 2) }]
         };
       } catch (error) {
-        this.logger.error('Error getting system status:', error);
+        logger.error('Error getting system status:', error);
         return {
           content: [{ type: 'text', text: `System status error: ${error.message}` }],
           isError: true
@@ -165,7 +204,7 @@ async function systemDispatcher(request) {
       }
     }
     case 'system_get_metrics': {
-      const { duration = 5 } = args || {};
+      const { duration = 5 } = sanitizedArgs || {};
       try {
         const startTime = Date.now();
         const startCpuUsage = process.cpuUsage();
@@ -205,7 +244,7 @@ async function systemDispatcher(request) {
           content: [{ type: 'text', text: JSON.stringify(metrics, null, 2) }]
         };
       } catch (error) {
-        this.logger.error('Error getting performance metrics:', error);
+        logger.error('Error getting performance metrics:', error);
         return {
           content: [{ type: 'text', text: `Metrics error: ${error.message}` }],
           isError: true
@@ -213,7 +252,7 @@ async function systemDispatcher(request) {
       }
     }
     case 'system_health_check': {
-      const { checkServices = true, checkDisk = true, checkMemory = true } = args || {};
+      const { checkServices = true, checkDisk = true, checkMemory = true } = sanitizedArgs || {};
       try {
         const healthStatus = {
           timestamp: new Date().toISOString(),
@@ -241,7 +280,7 @@ async function systemDispatcher(request) {
             const stats = await stat(process.cwd());
             healthStatus.checks.disk = {
               status: 'healthy',
-              workingDirectory: process.cwd(),
+              // Working directory path removed for security
               accessible: true
             };
           } catch (diskError) {
@@ -254,26 +293,45 @@ async function systemDispatcher(request) {
           }
         }
         if (checkServices) {
-          const services = ['fullstory', 'slack', 'snowflake'];
+          const services = ['fullstory', 'snowflake', 'bigQuery', 'googleWorkspace'];
           healthStatus.checks.services = {};
           for (const serviceName of services) {
             try {
               if (serviceRegistry.has(serviceName)) {
                 const service = serviceRegistry.get(serviceName);
-                let serviceHealth = 'unknown';
-                if (typeof service.healthCheck === 'function') {
-                  const health = await service.healthCheck();
-                  serviceHealth = health.status || 'healthy';
-                } else if (service.isConfigured) {
-                  serviceHealth = 'configured';
+                
+                // Use the same logic as initialization - check configuration status
+                let serviceStatus = 'unknown';
+                if (service.isConfigured) {
+                  serviceStatus = 'configured';
+                } else if (service.isConfigured === false) {
+                  serviceStatus = 'not_configured';
                 }
+                
+                // Get additional initialization details if available
+                let initDetails = {};
+                if (typeof service._initializeConnector === 'function') {
+                  try {
+                    initDetails = await service._initializeConnector() || {};
+                  } catch (error) {
+                    serviceStatus = 'error';
+                    initDetails = { error: error.message };
+                  }
+                }
+                
                 healthStatus.checks.services[serviceName] = {
-                  status: serviceHealth === 'healthy' || serviceHealth === 'configured' ? 'healthy' : 'warning',
+                  status: serviceStatus === 'configured' ? 'healthy' : serviceStatus === 'not_configured' ? 'warning' : 'critical',
                   isConfigured: service.isConfigured || false,
-                  healthCheck: serviceHealth
+                  healthCheck: serviceStatus,
+                  details: sanitizeServiceDetails(initDetails)
                 };
-                if (healthStatus.checks.services[serviceName].status === 'warning') {
-                  hasWarnings = true;
+                
+                if (healthStatus.checks.services[serviceName].status !== 'healthy') {
+                  if (healthStatus.checks.services[serviceName].status === 'critical') {
+                    hasErrors = true;
+                  } else {
+                    hasWarnings = true;
+                  }
                 }
               } else {
                 healthStatus.checks.services[serviceName] = {
@@ -313,7 +371,7 @@ async function systemDispatcher(request) {
           content: [{ type: 'text', text: JSON.stringify(healthStatus, null, 2) }]
         };
       } catch (error) {
-        this.logger.error('Error performing health check:', error);
+        logger.error('Error performing health check:', error);
         return {
           content: [{ type: 'text', text: `Health check error: ${error.message}` }],
           isError: true
@@ -327,7 +385,7 @@ async function systemDispatcher(request) {
           services: {},
           totalServices: 0
         };
-        const serviceNames = ['fullstory', 'slack', 'snowflake'];
+        const serviceNames = ['fullstory', 'snowflake', 'bigQuery', 'googleWorkspace'];
         for (const serviceName of serviceNames) {
           if (serviceRegistry.has(serviceName)) {
             const service = serviceRegistry.get(serviceName);
@@ -337,8 +395,7 @@ async function systemDispatcher(request) {
               isConfigured: service.isConfigured || false,
               status: service.status || 'unknown',
               lastInitialized: service.lastInitialized || null,
-              methods: Object.getOwnPropertyNames(Object.getPrototypeOf(service))
-                .filter(name => typeof service[name] === 'function' && !name.startsWith('_'))
+              // Method names removed for security
             };
             registryInfo.totalServices++;
           } else {
@@ -353,110 +410,15 @@ async function systemDispatcher(request) {
           content: [{ type: 'text', text: JSON.stringify(registryInfo, null, 2) }]
         };
       } catch (error) {
-        this.logger.error('Error getting service registry info:', error);
+        logger.error('Error getting service registry info:', error);
         return {
           content: [{ type: 'text', text: `Service registry error: ${error.message}` }],
           isError: true
         };
       }
     }
-    case 'system_get_logs': {
-      const { level = 'info', limit = 100, service } = args || {};
-      try {
-        const logEntries = [
-          {
-            timestamp: new Date().toISOString(),
-            level: 'info',
-            service: 'system',
-            message: 'System logs requested',
-            metadata: { level, limit, service }
-          }
-        ];
-        const recentEvents = [
-          { level: 'info', service: 'mcp-server', message: 'MCP server v3 started successfully' },
-          { level: 'info', service: 'fullstory', message: 'FullStory connector initialized' },
-          { level: 'info', service: 'slack', message: 'Slack connector initialized' },
-          { level: 'warn', service: 'snowflake', message: 'Snowflake connection check pending' }
-        ];
-        recentEvents.forEach(event => {
-          logEntries.push({
-            timestamp: new Date(Date.now() - Math.random() * 3600000).toISOString(),
-            level: event.level,
-            service: event.service,
-            message: event.message
-          });
-        });
-        let filteredLogs = logEntries;
-        if (service) {
-          filteredLogs = logEntries.filter(log => log.service === service);
-        }
-        filteredLogs = filteredLogs.slice(0, limit);
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              logs: filteredLogs,
-              filters: { level, limit, service },
-              totalEntries: filteredLogs.length
-            }, null, 2)
-          }]
-        };
-      } catch (error) {
-        this.logger.error('Error getting system logs:', error);
-        return {
-          content: [{ type: 'text', text: `Logs error: ${error.message}` }],
-          isError: true
-        };
-      }
-    }
-    case 'system_restart_service': {
-      const { serviceName } = args || {};
-      try {
-        if (!serviceRegistry.has(serviceName)) {
-          return {
-            content: [{ type: 'text', text: `Service ${serviceName} is not registered` }],
-            isError: true
-          };
-        }
-        const service = serviceRegistry.get(serviceName);
-        if (typeof service.restart === 'function') {
-          await service.restart();
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                success: true,
-                message: `Service ${serviceName} restarted successfully`,
-                timestamp: new Date().toISOString()
-              }, null, 2)
-            }]
-          };
-        } else if (typeof service.initialize === 'function') {
-          await service.initialize();
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                success: true,
-                message: `Service ${serviceName} reinitialized successfully`,
-                timestamp: new Date().toISOString()
-              }, null, 2)
-            }]
-          };
-        } else {
-          return {
-            content: [{ type: 'text', text: `Service ${serviceName} does not support restart or reinitialization` }],
-            isError: true
-          };
-        }
-      } catch (error) {
-        this.logger.error(`Error restarting service ${serviceName}:`, error);
-        return {
-          content: [{ type: 'text', text: `Service restart error: ${error.message}` }],
-          isError: true
-        };
-      }
-    }
+
+
     default:
       return {
         content: [{ type: 'text', text: `Unknown system tool: ${name}` }],

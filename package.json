@@ -11,13 +11,6 @@
         "build:cloudrun": "docker build -f MCP/Dockerfile.mcp -t lexicon-mcp .",
         "docker:mcp:gcp": "gcloud builds submit --config MCP/cloudbuild.yaml .",
         
-        "# Example Test/Development Deployment Scripts": "",
-        "# NOTE: Replace PROJECT_ID and SERVICE_ACCOUNT with your values": "",
-        "deploy:mcp:example": "npm run docker:mcp:gcp && npm run cloudrun:mcp:example",
-        "cloudrun:mcp:example": "gcloud run deploy lexicon-mcp-dev --image YOUR_REGION-docker.pkg.dev/YOUR_PROJECT_ID/YOUR_REPOSITORY/lexicon-mcp:latest --platform managed --service-account YOUR_SERVICE_ACCOUNT@YOUR_PROJECT_ID.iam.gserviceaccount.com --region YOUR_REGION --port 8080 --no-allow-unauthenticated --min-instances=1 --max-instances=5 --cpu=1 --memory=512Mi --update-secrets=API_KEY=your-api-key:latest,DATABASE_URL=your-database-url:latest --set-env-vars='NODE_ENV=development,MCP_MODE=true,SAFE_MODE=true'",
-
-
-        
         "# Utility Scripts": "",
         "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js",
         "test:ci": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --ci --coverage",
@@ -33,6 +26,15 @@
         "test:webhook:integration": "jest --config ./tests/jest.config.js --testPathPattern=tests/integration/webhook.integration.test.js",
         "test:changed": "jest --config ./tests/jest.config.js --onlyChanged",
         "test:verbose": "jest --config ./tests/jest.config.js --verbose",
+        "test:rate-limiting": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=comprehensive-rate-limiting.test.js",
+        "test:rate-limiting:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=integration-rate-limiting.test.js",
+        "test:mcp:auth": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=mcp-auth.test.js --forceExit",
+        "test:mcp:validation": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=mcp-input-validation.test.js --forceExit",
+        "test:mcp:security": "node --experimental-vm-modules node_modules/jest/bin/jest.js --config ./tests/jest.config.js --testPathPattern=mcp-security.integration.test.js --forceExit",
+        "test:mcp:security:all": "npm run test:mcp:auth && npm run test:mcp:validation && npm run test:mcp:security",
+        "test:mcp:enhanced": "./tests/enhanced-mcp-test.sh",
+        "test:comprehensive": "node ./tests/run-comprehensive-tests.js",
+        "test:comprehensive:no-server": "node ./tests/run-comprehensive-tests.js --skip-server",
         "verify": "node ./scripts/verify-installation.js",
         "docker:build": "docker build -t lexicon:$(node -p \"require('./package.json').version\") -t lexicon:latest --build-arg VERSION=$(node -p \"require('./package.json').version\") .",
         "docker:build:dev": "docker build -t lexicon:dev-$(node -p \"require('./package.json').version\") -t lexicon:dev --build-arg VERSION=$(node -p \"require('./package.json').version\") --build-arg NODE_ENV=development --build-arg SKIP_TESTS=true --build-arg K_SERVICE=local-dev --target builder .",
@@ -78,6 +80,6 @@
     "engines": {
         "node": ">=20"
     },
-    "author": "lexicon-contributors",
+    "author": "fullstory",
     "license": "MIT"
 }

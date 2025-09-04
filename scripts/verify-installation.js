@@ -5,14 +5,20 @@
  * variables are properly set up for Lexicon to run.
  */
 
-const { execSync } = require('child_process');
-const fs = require('fs');
-const path = require('path');
+import { execSync, spawn } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get __dirname equivalent for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Config import must be at the top to load .env file
 try {
-  require('dotenv').config();
-  const config = require('../config');
+  const dotenv = await import('dotenv');
+  dotenv.config();
+  const config = await import('../config.js');
   console.log('✅ Configuration module loaded successfully');
 } catch (error) {
   console.error('❌ Error loading configuration:', error.message);
@@ -347,10 +353,110 @@ function checkCoreFiles() {
     const fileExists = fs.existsSync(filePath);
     printResult(file, fileExists, fileExists ? '' : '- File not found');
   });
+  
+  // Check MCP files separately
+  console.log(`\n${colors.cyan}Checking MCP files:${colors.reset}`);
+  
+  const mcpFiles = [
+    'MCP/mcp-main.js',
+    'MCP/tools/system-tools.js',
+    'MCP/tools/fullstory-tools.js',
+    'MCP/tools/warehouse-tools.js'
+  ];
+  
+  mcpFiles.forEach(file => {
+    const filePath = path.join(__dirname, '..', file);
+    const fileExists = fs.existsSync(filePath);
+    printResult(file, fileExists, fileExists ? '' : '- File not found');
+  });
+}
+
+/**
+ * Check MCP server functionality
+ */
+async function checkMCP() {
+  console.log(`\n${colors.cyan}Checking MCP server functionality:${colors.reset}`);
+  
+  // Check if MCP can be started (basic syntax/import check)
+  try {
+    const mcpPath = path.join(__dirname, '../MCP/mcp-main.js');
+    if (fs.existsSync(mcpPath)) {
+      printResult('MCP main file', true, 'mcp-main.js exists');
+      
+      // Try to check MCP script for basic syntax errors
+      const mcpSyntaxCheck = execCommand(`node --check "${mcpPath}"`);
+      printResult('MCP syntax check', mcpSyntaxCheck !== null, 
+        mcpSyntaxCheck !== null ? 'No syntax errors' : 'Syntax errors detected');
+    } else {
+      printResult('MCP main file', false, 'mcp-main.js not found');
+      return;
+    }
+    
+    // Check if MCP server is running
+    console.log(`\n${colors.yellow}Checking if MCP server is running...${colors.reset}`);
+    
+    let mcpPort = process.env.PORT || 8080;
+    
+    // Check if MCP server is running on the expected port (don't use -f flag as server may return 503 for critical status)
+    const healthCheck = execCommand(`curl -s http://localhost:${mcpPort}/health`);
+    
+    if (healthCheck && healthCheck.includes('"status"')) {
+      // MCP server is running - test all endpoints
+      printResult('MCP server running', true, `Running on port ${mcpPort}`);
+      
+      try {
+        const healthData = JSON.parse(healthCheck);
+        printResult('Health endpoint', true, `Status: ${healthData.status}`);
+        
+        // Test services detection
+        if (healthData.checks && healthData.checks.services) {
+          const serviceCount = Object.keys(healthData.checks.services).length;
+          printResult('Services detected', serviceCount > 0, `${serviceCount} services found`);
+          
+          // List detected services
+          const services = Object.keys(healthData.checks.services);
+          console.log(`${colors.green}   Services: ${services.join(', ')}${colors.reset}`);
+        }
+        
+        // Test other endpoints
+        const statusResponse = execCommand(`curl -s http://localhost:${mcpPort}/status`);
+        printResult('Status endpoint', statusResponse !== null, 'Responding');
+        
+        const metricsResponse = execCommand(`curl -s http://localhost:${mcpPort}/metrics`);  
+        printResult('Metrics endpoint', metricsResponse !== null, 'Responding');
+        
+        // Test MCP protocol endpoint using tools/list (like test_mcp_session.sh)
+        const mcpProtocolTest = execCommand(`curl -s -X POST -H "Content-Type: application/json" -H "Accept: application/json, text/event-stream" -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' http://localhost:${mcpPort}/mcp`);
+        const mcpWorking = mcpProtocolTest && (mcpProtocolTest.includes('"tools":') || mcpProtocolTest.includes('fullstory') || mcpProtocolTest.includes('system_'));
+        printResult('MCP protocol endpoint', mcpWorking, mcpWorking ? 'MCP tools list working' : 'MCP protocol issue');
+        
+      } catch (error) {
+        printResult('MCP endpoint parsing', false, 'Error parsing response');
+      }
+      
+    } else {
+      // MCP server is not running
+      printResult('MCP server running', false, 'Not running');
+      console.log(`${colors.yellow}   To test MCP functionality, start the server first:${colors.reset}`);
+      console.log(`   ${colors.bright}npm run start:mcp${colors.reset}`);
+      console.log(`   ${colors.yellow}   Then run this verification script again.${colors.reset}`);
+    }
+    
+    // Check MCP npm script
+    const packageJsonPath = path.join(__dirname, '..', 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+      const hasMcpScript = packageJson.scripts && (packageJson.scripts['start:mcp'] || packageJson.scripts['mcp']);
+      printResult('MCP npm script', hasMcpScript, hasMcpScript ? 'npm run start:mcp available' : 'MCP scripts not found in package.json');
+    }
+    
+  } catch (error) {
+    printResult('MCP verification', false, `Error: ${error.message}`);
+  }
 }
 
 // Run verification checks
-function runVerification() {
+async function runVerification() {
   try {
     console.log(`${colors.cyan}Checking system requirements:${colors.reset}`);
     checkNodeVersion();
@@ -362,6 +468,9 @@ function runVerification() {
     checkCloudCLI();
     checkDocker();
     
+    // Add MCP verification
+    await checkMCP();
+    
     console.log(`\n${colors.cyan}Verification ${verificationPassed ? 'passed' : 'finished with warnings'}${colors.reset}`);
     
     if (!verificationPassed) {
@@ -369,6 +478,7 @@ function runVerification() {
     } else {
       console.log(`\n${colors.green}🎉 Lexicon is ready to run! Start the application with:${colors.reset}`);
       console.log(`\n   ${colors.bright}npm start${colors.reset} - Run locally`);
+      console.log(`   ${colors.bright}npm run start:mcp${colors.reset} - Run MCP server`);
       console.log(`   ${colors.bright}npm run dev:gcf${colors.reset} - Run locally using Functions Framework`);
       console.log(`   ${colors.bright}npm run docker:run${colors.reset} - Run in Docker`);
       
@@ -390,5 +500,8 @@ function runVerification() {
   }
 }
 
-// Start verification
-runVerification();
+// Start verification  
+runVerification().catch(error => {
+  console.error('Verification failed:', error);
+  process.exit(1);
+});

@@ -1,20 +1,29 @@
 # Lexicon MCP Server
 
-> Enterprise-grade Model Context Protocol server for FullStory, BigQuery, and Snowflake integration
+> Enterprise-grade Model Context Protocol server for FullStory integration
 
 ## Overview
 
-The Lexicon MCP Server is a modern, enterprise-ready implementation of the Model Context Protocol (MCP) that provides seamless integration with FullStory analytics, BigQuery, and Snowflake data warehouses. Built with the latest MCP SDK 1.13.0, it offers a declarative, type-safe API with comprehensive enterprise features.
+The Lexicon MCP Server is a modern, enterprise-ready implementation of the Model Context Protocol (MCP) that provides seamless integration with FullStory analytics. Built with the latest MCP SDK 1.13.0, it offers a declarative, type-safe API with comprehensive enterprise features.
 
 ## 🚀 Features
 
 ### Core Capabilities
 - **Modern MCP SDK**: Built with MCP SDK 1.13.0 using declarative APIs
 - **Multi-transport Support**: HTTP, Server-Sent Events (SSE), and stdio
-- **Enterprise Session Management**: TTL, cleanup, metrics tracking
-- **Security Middleware**: Rate limiting, authentication, authorization
-- **Monitoring & Observability**: Metrics collection, health checks
-- **Horizontal Scaling**: Clustered deployment support
+- **Enterprise Security**: OAuth 2.1 authentication + comprehensive input validation
+- **SAFE_MODE Security**: Read-only tool access for compliance environments
+- **Enterprise Rate Limiting**: HTTP and tool-level rate limiting with Redis clustering
+- **Comprehensive Tool Coverage**: 29 enterprise-grade tools across FullStory and system diagnostics
+- **Monitoring & Observability**: Health checks and system diagnostics
+- **Container Ready**: Docker support with proper signal handling
+
+### Security Features
+- **OAuth 2.1 Authentication**: MCP-compliant authentication with PKCE (disabled by default)
+- **Input Validation**: Comprehensive protection against SQL injection, XSS, path traversal, and command injection
+- **Token Audience Binding**: Prevents confused deputy attacks and token passthrough
+- **Authorization Server Discovery**: RFC-compliant metadata and discovery endpoints
+- **Security Monitoring**: Detailed logging and alerting for security events
 
 ### Tool Categories
 
@@ -40,29 +49,8 @@ To control SAFE_MODE, set the environment variable in your deployment or `.env` 
 - Data retrieval (user events, pages, journeys)
 - Advanced analytics and health check tools
 
-#### 2. Warehouse Tools (BigQuery + Snowflake)
-All warehouse tools are registered using an explicit, JSON Schema-based pattern. Every tool is platform-agnostic and leverages the Konbini.js abstraction layer for SQL generation, parameterization, and execution. This ensures consistent, maintainable, and extensible integration for BigQuery and Snowflake, with no legacy or custom registration logic.
 
-- **Explicit Registration**: All warehouse tools use plain JSON Schema for input validation and are registered explicitly for MCP compliance.
-- **Platform-Agnostic Logic**: SQL generation and query logic are handled by Konbini.js, supporting BigQuery and Snowflake out of the box and easily extensible for new platforms.
-- **Comprehensive Tooling**: Includes query execution, table/schema exploration, health checks, and platform-specific SQL generation.
-- **JSDoc Documentation**: All tools and parameters are documented with JSDoc for clarity and maintainability.
-
-Example usage:
-```javascript
-// Generate SQL for a warehouse tool
-const { sql, params } = konbini.quickQueries.generateQuery({
-  queryType: 'list_tables',
-  platform: 'bigquery',
-  target: 'myproject.mydataset',
-  limit: 100
-});
-const results = await googleCloud.bigQuery.createQueryJob(sql, params, { maxResults: 100 });
-```
-
-All tool endpoints in MCP now use this pattern for BigQuery and Snowflake, ensuring maintainability and cross-platform compatibility.
-
-#### 3. System Tools
+#### 2. System Tools
 All system tools are registered using the same explicit, JSON Schema-based pattern for clarity and future-proofing.
 
 - `system_health_check` - Complete system health diagnostics
@@ -83,8 +71,6 @@ All system tools are registered using the same explicit, JSON Schema-based patte
 ### Prerequisites
 - Node.js ≥ 20
 - Valid FullStory API credentials
-- Snowflake connection (optional)
-- BigQuery credentials (optional)
 
 ### Quick Start
 
@@ -113,47 +99,88 @@ Key environment variables:
 FULLSTORY_API_KEY=your_api_key
 FULLSTORY_ORG_ID=your_org_id
 
-# Snowflake Configuration
-SNOWFLAKE_ACCOUNT=your_account
-SNOWFLAKE_USERNAME=your_username
-SNOWFLAKE_PASSWORD=your_password
-SNOWFLAKE_DATABASE=your_database
-SNOWFLAKE_SCHEMA=your_schema
-
-# BigQuery Configuration
-GOOGLE_APPLICATION_CREDENTIALS=path/to/credentials.json
-BIGQUERY_PROJECT_ID=your_project_id
 
 # Server Configuration
 MCP_SERVER_NAME=lexicon-mcp-enterprise
 MCP_PORT=3000
 MCP_HOST=0.0.0.0
+
+# Rate Limiting Configuration
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_MCP_MAX_REQUESTS=30         # HTTP requests per minute
+RATE_LIMIT_TOOL_MAX_REQUESTS=20        # Tool calls per minute
+RATE_LIMIT_USE_REDIS=false             # Use Redis for distributed limiting
+
+# Security Configuration (Optional)
+MCP_AUTH_ENABLED=false                 # OAuth 2.1 authentication (disabled by default)
+MCP_AUTH_SERVER_URL=                   # Authorization server URL
+MCP_SERVER_CANONICAL_URI=              # This server's canonical URI
+MCP_AUTH_CLIENT_ID=                    # OAuth client ID
+SAFE_MODE=false                        # Restrict to read-only tools
 ```
+
+### Authentication Configuration (Optional)
+
+By default, **authentication is disabled** - users should handle authentication at the infrastructure level (IAM, VPCs, firewalls). OAuth 2.1 authentication can be optionally enabled for standards-compliant API access:
+
+```bash
+# Enable OAuth 2.1 authentication
+export MCP_AUTH_ENABLED=true
+export MCP_AUTH_SERVER_URL=https://auth.example.com
+export MCP_SERVER_CANONICAL_URI=https://mcp.example.com
+export MCP_AUTH_CLIENT_ID=your-client-id
+
+# Optional: Enable dynamic client registration
+export MCP_AUTH_ALLOW_DYNAMIC_REGISTRATION=true
+```
+
+When enabled, the server provides OAuth 2.1 discovery endpoints:
+- `/.well-known/oauth-protected-resource` - Protected resource metadata (RFC 9728)
+- `/.well-known/oauth-authorization-server` - Authorization server metadata (RFC 8414)
+
+### Input Validation (Always Active)
+
+Input validation runs automatically for all tools and cannot be disabled. It protects against:
+- XSS vulnerabilities in all text inputs
+- Path traversal attempts in file-related parameters
+- Command injection in system operations
+- Command injection in system tools
+- Schema bypass attempts
+
+Production environments automatically enable stricter validation rules that block dangerous SQL operations.
 
 ## 🏗️ Architecture
 
 ### Hybrid Tool Registration
 All tools are now registered using explicit JSON Schema-based registration. There is no auto-registration or legacy custom registration logic. This ensures full type safety, maintainability, and MCP compliance.
 
-### Database Abstraction (Konbini.js)
-Warehouse operations use the Konbini.js abstraction layer:
 
-```javascript
-// Platform-agnostic SQL generation
-const adapter = konbini.warehouse.getAdapter({ databaseType: 'bigquery' });
-const sql = adapter.generateSql('select', 'users', ['id', 'name'], {}, { active: true });
-```
+### Security Architecture
+The MCP server implements defense-in-depth security with multiple layers:
 
-Supported platforms:
-- **BigQuery**: Google Cloud's serverless data warehouse
-- **Snowflake**: Cloud-native data platform
+#### Infrastructure Level (Recommended Primary)
+- **Cloud IAM**: Use cloud provider IAM for primary authentication
+- **Network Security**: VPC restrictions, firewalls, load balancer authentication
+- **TLS/HTTPS**: Encrypted communication for all endpoints
 
-### Session Management
-Enterprise-grade session management with:
-- Configurable TTL and cleanup
-- Session metrics and activity tracking
-- Authentication and authorization
-- Session limit enforcement
+#### Application Level (Optional OAuth 2.1)
+- **OAuth 2.1 with PKCE**: Standards-compliant authentication (disabled by default)
+- **Token Audience Binding**: Prevents token passthrough and confused deputy attacks
+- **Authorization Server Discovery**: RFC 9728/8414 compliant metadata endpoints
+- **Dynamic Client Registration**: Automated client setup (RFC 7591)
+
+#### Input Security (Always Active)
+- **SQL Injection Protection**: Pattern detection and query sanitization
+- **XSS Prevention**: HTML/JavaScript sanitization and encoding
+- **Path Traversal Blocking**: Directory traversal attack prevention
+- **Command Injection Detection**: System command execution prevention
+- **Schema Validation**: Strict JSON schema enforcement with length limits
+
+#### Operational Security
+- **SAFE_MODE**: Restricts access to read-only tools when enabled
+- **Rate Limiting**: Multi-tier protection against abuse with HTTP and tool-level limits
+- **Security Monitoring**: Comprehensive logging and alerting for security events
+- **Environment-based Configuration**: Secure credential management through environment variables
 
 
 ### Tool Examples
@@ -171,17 +198,6 @@ Enterprise-grade session management with:
 }
 ```
 
-#### Warehouse Query
-```javascript
-// Execute platform-specific query
-{
-  \"name\": \"warehouse_execute_query\",
-  \"arguments\": {
-    \"sql\": \"SELECT COUNT(*) FROM users WHERE created_date >= '2024-01-01'\",
-    \"platform\": \"snowflake\",
-    \"limit\": 1000
-  }
-}
 ```
 
 #### System Health Check
@@ -214,7 +230,6 @@ The server collects comprehensive metrics:
 Structured logging with multiple levels:
 ```bash
 [2024-06-23T14:40:35.717Z] [INFO] [FullStoryTools] Auto-registered 23 CRUD methods
-[2024-06-23T14:40:35.719Z] [INFO] [WarehouseTools] Warehouse tools registered
 [2024-06-23T14:40:35.720Z] [INFO] [SystemTools] System tools registered
 ```
 
@@ -225,7 +240,7 @@ Structured logging with multiple levels:
 SAFE_MODE is a security feature that restricts tool access to a curated set of read-only and non-destructive operations for compliance and secure environments. When enabled (`SAFE_MODE=true`), only tools explicitly listed as safe in the codebase are available. Attempts to use restricted tools will return an error message.
 
 - **How to Enable**: Set the environment variable `SAFE_MODE=true` in your deployment or `.env` file.
-- **Where to Control**: SAFE_MODE logic and the list of safe tools are defined in the codebase (see `tools/fullstory-tools.js`, `tools/warehouse-tools.js`).
+- **Where to Control**: SAFE_MODE logic and the list of safe tools are defined in the codebase (see `tools/fullstory-tools.js`).
 - **Affected Tools**: Only tools listed in the `SAFE_TOOL_NAMES` arrays in each tool file are available. These typically include:
   - Profile and session retrieval
   - Analytics and health checks
@@ -239,8 +254,146 @@ SAFE_MODE=true # Enable SAFE_MODE for secure, read-only operation
 
 If you attempt to use a restricted tool in SAFE_MODE, the server will return an error indicating the tool is not available.
 
+## 🛡️ Rate Limiting
+
+The MCP server includes enterprise-grade rate limiting to protect against abuse and ensure fair resource usage.
+
+### MCP-Specific Rate Limiting
+
+The MCP mode implements two levels of rate limiting:
+
+1. **HTTP Level**: Protects MCP endpoints (`/mcp`, `/health`, `/status`, `/metrics`)
+2. **Tool Level**: Protects individual tool executions within the MCP protocol
+
+### Configuration
+
+```bash
+# Enable/disable rate limiting
+RATE_LIMIT_ENABLED=true
+
+# MCP HTTP endpoint limits
+RATE_LIMIT_MCP_WINDOW_MS=60000         # 1 minute window
+RATE_LIMIT_MCP_MAX_REQUESTS=30         # 30 HTTP requests per minute
+
+# Tool execution limits
+RATE_LIMIT_TOOL_WINDOW_MS=60000        # 1 minute window
+RATE_LIMIT_TOOL_MAX_REQUESTS=20        # 20 tool calls per minute
+
+# Storage backend (Redis recommended for production)
+RATE_LIMIT_USE_REDIS=true
+RATE_LIMIT_REDIS_URL=redis://redis-cluster:6379
+```
+
+### Rate Limiting Behavior
+
+When rate limits are exceeded:
+
+**HTTP Level**: Returns 429 status with retry-after headers:
+```json
+{
+  "success": false,
+  "error": "Rate limit exceeded", 
+  "message": "Too many requests, please try again later.",
+  "rateLimitInfo": {
+    "limit": 30,
+    "remaining": 0,
+    "resetTime": 1234567890,
+    "retryAfter": 60
+  }
+}
+```
+
+**Tool Level**: Returns MCP error response:
+```json
+{
+  "content": [{
+    "type": "text",
+    "text": "Rate limit exceeded for tool \"toolname\". Please try again in 45 seconds."
+  }],
+  "isError": true
+}
+```
+
+### Production Recommendations
+
+For high-volume AI agent deployments:
+
+```bash
+# Conservative limits for production
+RATE_LIMIT_MCP_MAX_REQUESTS=100        # Adjust based on your traffic
+RATE_LIMIT_TOOL_MAX_REQUESTS=50        # Adjust based on AI agent usage
+
+# Use Redis for distributed instances
+RATE_LIMIT_USE_REDIS=true
+RATE_LIMIT_REDIS_URL=redis://your-redis-cluster:6379
+
+# Trust proxy headers if behind load balancer
+RATE_LIMIT_TRUST_PROXY=true
+```
+
+For complete rate limiting documentation, see [RATE_LIMITING.md](../RATE_LIMITING.md) in the main project.
+
+## 📚 Documentation
+
+### Security & Authentication
+- **[Security Overview](./SECURITY.md)** - Comprehensive security architecture, hardening recommendations, and incident response procedures
+- **[Authentication Guide](./auth/README.md)** - OAuth 2.1 authentication configuration, standards compliance, and troubleshooting
+- **[Input Validation](./validation/README.md)** - Input validation and sanitization system protecting against injection attacks
+
+### Key Security Features
+
+#### 🔒 Authentication (Disabled by Default)
+- OAuth 2.1 with PKCE implementation following MCP specification 2025-06-18
+- Authorization server discovery and metadata endpoints (RFC 9728, RFC 8414)
+- Token audience binding to prevent confused deputy attacks
+- Dynamic client registration support (RFC 7591)
+- Comprehensive security logging and monitoring
+
+**Why disabled by default?** We recommend handling authentication at the infrastructure level (IAM, VPCs, firewalls) for most deployments. OAuth 2.1 authentication is available when you need standards-compliant API access or third-party client integration.
+
+#### 🛡️ Input Validation (Always Active)
+- SQL injection protection with pattern detection and query sanitization
+- XSS prevention through HTML/JavaScript sanitization
+- Path traversal blocking to prevent directory access attacks
+- Command injection detection for system security
+- JSON schema validation with configurable length limits
+- Production-specific restrictions on dangerous operations
+
+#### 📊 Security Monitoring
+- Real-time security event logging
+- Authentication success/failure tracking
+- Input validation failure pattern analysis
+- Rate limit monitoring and alerting
+- Comprehensive audit trails for compliance
+
+### Getting Started with Security
+
+1. **Default Secure Setup** (Recommended)
+   ```bash
+   # Authentication handled at infrastructure level
+   # Input validation active automatically
+   npm run start:mcp
+   ```
+
+2. **Enable OAuth 2.1 Authentication**
+   ```bash
+   export MCP_AUTH_ENABLED=true
+   export MCP_AUTH_SERVER_URL=https://your-auth-server.com
+   export MCP_SERVER_CANONICAL_URI=https://your-mcp-server.com
+   npm run start:mcp
+   ```
+
+3. **High Security Mode**
+   ```bash
+   export MCP_AUTH_ENABLED=true
+   export SAFE_MODE=true  # Read-only tools only
+   export NODE_ENV=production  # Stricter validation
+   npm run start:mcp
+   ```
+
 ## 📄 License
 
 MIT License - see LICENSE file for details.
 
 ---
+
