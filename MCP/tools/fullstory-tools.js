@@ -142,15 +142,7 @@ const fullstoryTools = [
                 exclude_types: { type: 'array', items: { type: 'string' }, description: 'Event types to exclude' }
               }
             },
-            cache: { type: 'object', description: 'Cache configuration (object)' },
-            llm: {
-              type: 'object',
-              description: 'LLM configuration',
-              properties: {
-                model: { type: 'string', enum: ['GEMINI_2_FLASH', 'GEMINI_2_FLASH_LITE'], description: 'LLM model to use' },
-                temperature: { type: 'number', description: 'LLM temperature (randomness)' }
-              }
-            }
+            cache: { type: 'object', description: 'Cache configuration (object)' }
           }
         }
       },
@@ -195,15 +187,7 @@ const fullstoryTools = [
                 exclude_types: { type: 'array', items: { type: 'string' }, description: 'Event types to exclude' }
               }
             },
-            cache: { type: 'object', description: 'Cache configuration (object)' },
-            llm: {
-              type: 'object',
-              description: 'LLM configuration',
-              properties: {
-                model: { type: 'string', enum: ['GEMINI_2_FLASH', 'GEMINI_2_FLASH_LITE'], description: 'LLM model to use' },
-                temperature: { type: 'number', description: 'LLM temperature (randomness)' }
-              }
-            }
+            cache: { type: 'object', description: 'Cache configuration (object)' }
           }
         }
       },
