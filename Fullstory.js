@@ -1930,9 +1930,6 @@ class FullstoryConnector extends ConnectorBase {
    *   @param {Array<string>} [options.events.include_types] - Event types to include.
    *   @param {Array<string>} [options.events.exclude_types] - Event types to exclude.
    * @param {Object} [options.cache] - Optional. Cache configuration (object).
-   * @param {Object} [options.llm] - Optional. LLM configuration. May include:
-   *   @param {string} [options.llm.model] - LLM model to use (e.g., 'GEMINI_2_FLASH', 'GEMINI_2_FLASH_LITE').
-   *   @param {number} [options.llm.temperature] - LLM temperature (randomness).
    * @returns {Promise<Object>} The generated session context object.
    * @throws {Error} If the API request fails or sessionId is missing/invalid.
    */
@@ -1940,8 +1937,8 @@ class FullstoryConnector extends ConnectorBase {
     if (!sessionId) throw new Error('sessionId is required');
     const query = options.config_profile ? `?config_profile=${encodeURIComponent(options.config_profile)}` : '';
     const endpoint = `${this.apiVersion}/sessions/${encodeURIComponent(sessionId)}/context${query}`;
-    // Remove config_profile from body if present
-    const { config_profile, ...body } = options;
+    // Remove config_profile and llm from body as they are not supported by the Generate Context API
+    const { config_profile, llm, ...body } = options;
     return this._makeRequest(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
