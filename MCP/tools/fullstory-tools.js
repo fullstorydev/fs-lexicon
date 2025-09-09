@@ -191,6 +191,7 @@ const fullstoryTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        user_id: { type: 'string', description: 'The unique identifier for the user (required)' },
         session_id: { type: 'string', description: 'The unique identifier for the session (required)' },
         options: {
           type: 'object',
@@ -227,52 +228,7 @@ const fullstoryTools = [
           }
         }
       },
-      required: ['session_id']
-    }
-  },
-  {
-    name: 'fullstory_generate_context',
-    description: 'Generate generic context for a session (FullStory v2)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        session_id: { type: 'string', description: 'The unique identifier for the session (required)' },
-        options: {
-          type: 'object',
-          description: 'Optional configuration for context generation',
-          properties: {
-            config_profile: { type: 'string', description: 'Optional configuration profile to use for context generation' },
-            slice: {
-              type: 'object',
-              description: 'Slicing options for the session',
-              properties: {
-                mode: { type: 'string', enum: ['UNSPECIFIED', 'FIRST', 'LAST', 'TIMESTAMP'], description: 'Slicing mode' },
-                event_limit: { type: 'number', description: 'Limit number of events' },
-                duration_limit_ms: { type: 'number', description: 'Limit session duration in ms' },
-                start_timestamp: { type: 'string', description: 'Start timestamp for slicing (ISO8601)' }
-              }
-            },
-            context: {
-              type: 'object',
-              description: 'Context configuration',
-              properties: {
-                include: { type: 'array', items: { type: 'string' }, description: 'Fields to include in the context' },
-                exclude: { type: 'array', items: { type: 'string' }, description: 'Fields to exclude from the context' }
-              }
-            },
-            events: {
-              type: 'object',
-              description: 'Events configuration',
-              properties: {
-                include_types: { type: 'array', items: { type: 'string' }, description: 'Event types to include' },
-                exclude_types: { type: 'array', items: { type: 'string' }, description: 'Event types to exclude' }
-              }
-            },
-            cache: { type: 'object', description: 'Cache configuration (object)' }
-          }
-        }
-      },
-      required: ['session_id']
+      required: ['user_id', 'session_id']
     }
   },
   {
@@ -705,16 +661,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_generate_session_context': {
-      const result = await fullstoryConnector.generateSessionContext(sanitizedArgs.session_id, sanitizedArgs.options || {});
-      return {
-        content: [
-          { type: 'text', text: asPrettyText(result) }
-        ],
-        structuredContent: result
-      };
-    }
-    case 'fullstory_generate_context': {
-      const result = await fullstoryConnector.generateSessionContext(sanitizedArgs.session_id, sanitizedArgs.options || {});
+      const result = await fullstoryConnector.generateSessionContext(sanitizedArgs.user_id, sanitizedArgs.session_id, sanitizedArgs.options || {});
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }

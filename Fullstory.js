@@ -1923,6 +1923,7 @@ class FullstoryConnector extends ConnectorBase {
    *
    * Official API docs: https://developer.fullstory.com/server/sessions/generate-context/
    *
+   * @param {string} userId - The unique identifier for the user (required).
    * @param {string} sessionId - The unique identifier for the session (required).
    * @param {Object} [options] - Optional configuration for context generation.
    * @param {string} [options.config_profile] - Optional configuration profile to use for context generation.
@@ -1939,12 +1940,15 @@ class FullstoryConnector extends ConnectorBase {
    *   @param {Array<string>} [options.events.exclude_types] - Event types to exclude.
    * @param {Object} [options.cache] - Optional. Cache configuration (object).
    * @returns {Promise<Object>} The generated session context object.
-   * @throws {Error} If the API request fails or sessionId is missing/invalid.
+   * @throws {Error} If the API request fails or parameters are missing/invalid.
    */
-  async generateSessionContext(sessionId, options = {}) {
-    if (!sessionId) throw new Error('sessionId is required');
+  async generateSessionContext(userId, sessionId, options = {}) {
+    if (!userId || !sessionId) {
+      throw new Error('Both userId and sessionId are required');
+    }
+    const formattedId = this._formatSessionId(userId, sessionId);
     const query = options.config_profile ? `?config_profile=${encodeURIComponent(options.config_profile)}` : '';
-    const endpoint = `${this.apiVersion}/sessions/${encodeURIComponent(sessionId)}/context${query}`;
+    const endpoint = `${this.apiVersion}/sessions/${formattedId}/context${query}`;
     // Remove config_profile from body if present
     const { config_profile, ...body } = options;
     return this._makeRequest(endpoint, {
@@ -1953,6 +1957,7 @@ class FullstoryConnector extends ConnectorBase {
       body: Object.keys(body).length ? JSON.stringify(body) : undefined
     });
   }
+
 
   /**
    * Get events for a specific session
