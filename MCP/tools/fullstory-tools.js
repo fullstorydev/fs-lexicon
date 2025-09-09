@@ -75,91 +75,10 @@ const fullstoryTools = [
         cache: { type: 'object', description: 'Cache configuration (object)' },
         llm: {
           type: 'object',
-          description: 'LLM configuration for Generative AI prompting and inference',
+          description: 'LLM configuration',
           properties: {
-            pre_prompt: { type: 'string', description: 'Text to be included in the Generative AI prompt before the session context' },
-            post_prompt: { type: 'string', description: 'Text to be included in the Generative AI prompt after the session context' },
-            output_schema: { type: 'string', description: 'Optional JSON Schema to define output (legacy string-based)' },
             model: { type: 'string', enum: ['GEMINI_2_FLASH', 'GEMINI_2_FLASH_LITE'], description: 'LLM model to use' },
-            temperature: { type: 'number', description: 'LLM temperature (randomness)' },
-            response_schema: { 
-              type: 'object', 
-              description: 'JSON schema for generating structured response (enforced at LLM, highly reliable)',
-              properties: {
-                type: { type: 'string', enum: ['OPENAPI_TYPE_UNSPECIFIED', 'STRING', 'NUMBER', 'INTEGER', 'BOOLEAN', 'ARRAY', 'OBJECT'], description: 'JSON schema type' },
-                title: { type: 'string', description: 'Schema title' },
-                description: { type: 'string', description: 'Schema description' },
-                items: { type: 'object', description: 'Items schema for arrays' },
-                properties: { type: 'object', description: 'Properties schema for objects' },
-                required: { type: 'array', items: { type: 'string' }, description: 'Required properties' },
-                nullable: { type: 'boolean', description: 'Whether the value can be null' },
-                enum: { type: 'array', items: { type: 'string' }, description: 'Enumerated values' }
-              }
-            }
-          }
-        },
-        name: { type: 'string', description: 'The display name of the profile' }
-      },
-      required: ['profile_id']
-    }
-  },
-  {
-    name: 'fullstory_create_profile',
-    description: 'Create a session profile (FullStory v2)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        profile_id: { type: 'string', description: 'The session profile ID (required)' },
-        slice: {
-          type: 'object',
-          description: 'Slicing options for the session',
-          properties: {
-            mode: { type: 'string', enum: ['UNSPECIFIED', 'FIRST', 'LAST', 'TIMESTAMP'], description: "Slicing mode" },
-            event_limit: { type: 'integer', description: 'Maximum number of events' },
-            duration_limit_ms: { type: 'integer', description: 'Maximum duration in milliseconds' },
-            start_timestamp: { type: 'string', format: 'date-time', description: 'Start timestamp for slicing' }
-          }
-        },
-        context: {
-          type: 'object',
-          description: 'Context configuration',
-          properties: {
-            include: { type: 'array', items: { type: 'string' }, description: 'Context elements to include' },
-            exclude: { type: 'array', items: { type: 'string' }, description: 'Context elements to exclude' }
-          }
-        },
-        events: {
-          type: 'object',
-          description: 'Events configuration',
-          properties: {
-            include_types: { type: 'array', items: { type: 'string' }, description: 'Event types to include' },
-            exclude_types: { type: 'array', items: { type: 'string' }, description: 'Event types to exclude' }
-          }
-        },
-        cache: { type: 'object', description: 'Cache configuration (object)' },
-        llm: {
-          type: 'object',
-          description: 'LLM configuration for Generative AI prompting and inference',
-          properties: {
-            pre_prompt: { type: 'string', description: 'Text to be included in the Generative AI prompt before the session context' },
-            post_prompt: { type: 'string', description: 'Text to be included in the Generative AI prompt after the session context' },
-            output_schema: { type: 'string', description: 'Optional JSON Schema to define output (legacy string-based)' },
-            model: { type: 'string', enum: ['GEMINI_2_FLASH', 'GEMINI_2_FLASH_LITE'], description: 'LLM model to use' },
-            temperature: { type: 'number', description: 'LLM temperature (randomness)' },
-            response_schema: { 
-              type: 'object', 
-              description: 'JSON schema for generating structured response (enforced at LLM, highly reliable)',
-              properties: {
-                type: { type: 'string', enum: ['OPENAPI_TYPE_UNSPECIFIED', 'STRING', 'NUMBER', 'INTEGER', 'BOOLEAN', 'ARRAY', 'OBJECT'], description: 'JSON schema type' },
-                title: { type: 'string', description: 'Schema title' },
-                description: { type: 'string', description: 'Schema description' },
-                items: { type: 'object', description: 'Items schema for arrays' },
-                properties: { type: 'object', description: 'Properties schema for objects' },
-                required: { type: 'array', items: { type: 'string' }, description: 'Required properties' },
-                nullable: { type: 'boolean', description: 'Whether the value can be null' },
-                enum: { type: 'array', items: { type: 'string' }, description: 'Enumerated values' }
-              }
-            }
+            temperature: { type: 'number', description: 'LLM temperature (randomness)' }
           }
         },
         name: { type: 'string', description: 'The display name of the profile' }
@@ -191,6 +110,7 @@ const fullstoryTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        user_id: { type: 'string', description: 'The unique identifier for the user (required)' },
         session_id: { type: 'string', description: 'The unique identifier for the session (required)' },
         options: {
           type: 'object',
@@ -227,7 +147,7 @@ const fullstoryTools = [
           }
         }
       },
-      required: ['session_id']
+      required: ['user_id', 'session_id']
     }
   },
   {
@@ -236,6 +156,7 @@ const fullstoryTools = [
     inputSchema: {
       type: 'object',
       properties: {
+        user_id: { type: 'string', description: 'The unique identifier for the user (required)' },
         session_id: { type: 'string', description: 'The unique identifier for the session (required)' },
         options: {
           type: 'object',
@@ -272,7 +193,7 @@ const fullstoryTools = [
           }
         }
       },
-      required: ['session_id']
+      required: ['user_id', 'session_id']
     }
   },
   {
@@ -686,15 +607,6 @@ async function fullstoryDispatcher(request) {
         structuredContent: result
       };
     }
-    case 'fullstory_create_profile': {
-      const result = await fullstoryConnector.createSessionProfile(sanitizedArgs);
-      return {
-        content: [
-          { type: 'text', text: asPrettyText(result) }
-        ],
-        structuredContent: result
-      };
-    }
     case 'fullstory_delete_profile': {
       const result = await fullstoryConnector.deleteSessionProfile(sanitizedArgs);
       return {
@@ -705,7 +617,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_generate_session_context': {
-      const result = await fullstoryConnector.generateSessionContext(sanitizedArgs.session_id, sanitizedArgs.options || {});
+      const result = await fullstoryConnector.generateSessionContext(sanitizedArgs.user_id, sanitizedArgs.session_id, sanitizedArgs.options || {});
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
@@ -714,7 +626,7 @@ async function fullstoryDispatcher(request) {
       };
     }
     case 'fullstory_generate_context': {
-      const result = await fullstoryConnector.generateSessionContext(sanitizedArgs.session_id, sanitizedArgs.options || {});
+      const result = await fullstoryConnector.generateSessionContext(sanitizedArgs.user_id, sanitizedArgs.session_id, sanitizedArgs.options || {});
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }
