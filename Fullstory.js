@@ -1805,8 +1805,12 @@ class FullstoryConnector extends ConnectorBase {
    *   @param {Array<string>} [params.events.exclude_types] - Event types to exclude
    * @param {Object} [params.cache] - Optional. Cache configuration (object)
    * @param {Object} [params.llm] - Optional. LLM configuration. May include:
+   *   @param {string} [params.llm.pre_prompt] - Text to be included in the Generative AI prompt before the session context
+   *   @param {string} [params.llm.post_prompt] - Text to be included in the Generative AI prompt after the session context
+   *   @param {string} [params.llm.output_schema] - Optional JSON Schema to define output (legacy string-based)
    *   @param {string} [params.llm.model] - LLM model to use (e.g., 'GEMINI_2_FLASH', 'GEMINI_2_FLASH_LITE')
    *   @param {number} [params.llm.temperature] - LLM temperature (randomness)
+   *   @param {Object} [params.llm.response_schema] - JSON schema for generating structured response (enforced at LLM, highly reliable)
    * @param {string} [params.name] - Optional. The display name of the profile
    * @returns {Promise<Object>} Created session profile object
    */
@@ -1840,10 +1844,14 @@ class FullstoryConnector extends ConnectorBase {
    *   @param {Array<string>} [params.events.exclude_types] - Event types to exclude
    * @param {Object} [params.cache] - Optional. Cache configuration (object)
    * @param {Object} [params.llm] - Optional. LLM configuration. May include:
+   *   @param {string} [params.llm.pre_prompt] - Text to be included in the Generative AI prompt before the session context
+   *   @param {string} [params.llm.post_prompt] - Text to be included in the Generative AI prompt after the session context
+   *   @param {string} [params.llm.output_schema] - Optional JSON Schema to define output (legacy string-based)
    *   @param {string} [params.llm.model] - LLM model to use (e.g., 'GEMINI_2_FLASH', 'GEMINI_2_FLASH_LITE')
    *   @param {number} [params.llm.temperature] - LLM temperature (randomness)
+   *   @param {Object} [params.llm.response_schema] - JSON schema for generating structured response (enforced at LLM, highly reliable)
    * @param {string} [params.name] - Optional. The display name of the profile
-   * @returns {Promise<Object>} Created session profile object
+   * @returns {Promise<Object>} Updated session profile object
    */
   async updateSessionProfile(params) {
     const { profile_id, ...body } = params;
@@ -1937,8 +1945,51 @@ class FullstoryConnector extends ConnectorBase {
     if (!sessionId) throw new Error('sessionId is required');
     const query = options.config_profile ? `?config_profile=${encodeURIComponent(options.config_profile)}` : '';
     const endpoint = `${this.apiVersion}/sessions/${encodeURIComponent(sessionId)}/context${query}`;
-    // Remove config_profile and llm from body as they are not supported by the Generate Context API
-    const { config_profile, llm, ...body } = options;
+    // Remove config_profile from body if present
+    const { config_profile, ...body } = options;
+    return this._makeRequest(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+      body: Object.keys(body).length ? JSON.stringify(body) : undefined
+    });
+  }
+
+  /**
+   * Generate context for a specific session with experimental media support (FullStory v2)
+   *
+   * Generates a context object for a session, including user, session, and event context, with optional configuration.
+   * This experimental version includes media object support for screenshots and visual content.
+   *
+   * @param {string} sessionId - The unique identifier for the session (required).
+   * @param {Object} [options] - Optional configuration for context generation.
+   * @param {string} [options.config_profile] - Optional configuration profile to use for context generation.
+   * @param {Object} [options.slice] - Optional. Slicing options for the session. May include:
+   *   @param {('UNSPECIFIED'|'FIRST'|'LAST'|'TIMESTAMP')} [options.slice.mode] - Slicing mode.
+   *   @param {number} [options.slice.event_limit] - Limit number of events.
+   *   @param {number} [options.slice.duration_limit_ms] - Limit session duration in ms.
+   *   @param {string} [options.slice.start_timestamp] - Start timestamp for slicing (ISO8601).
+   * @param {Object} [options.context] - Optional. Context configuration. May include:
+   *   @param {Array<string>} [options.context.include] - Fields to include in the context.
+   *   @param {Array<string>} [options.context.exclude] - Fields to exclude from the context.
+   * @param {Object} [options.events] - Optional. Events configuration. May include:
+   *   @param {Array<string>} [options.events.include_types] - Event types to include.
+   *   @param {Array<string>} [options.events.exclude_types] - Event types to exclude.
+   *   @param {number} [options.events.trim_to_last_n_selectors] - Trim events to last N selectors.
+   * @param {Object} [options.media] - Optional. Media configuration for screenshots and visual content. May include:
+   *   @param {boolean} [options.media.include_screenshots] - Whether to include screenshots in the context.
+   *   @param {Array<string>} [options.media.screenshot_event_types] - Event types to capture screenshots for (e.g., ["element-seen"]).
+   *   @param {boolean} [options.media.crop_screenshots_to_selector] - Whether to crop screenshots to the selector element bounds.
+   *   @param {boolean} [options.media.full_page_screenshots] - Whether to capture full page screenshots instead of viewport only.
+   * @param {Object} [options.cache] - Optional. Cache configuration (object).
+   * @returns {Promise<Object>} The generated session context object with experimental media support.
+   * @throws {Error} If the API request fails or sessionId is missing/invalid.
+   */
+  async generateSessionContextExperimental(sessionId, options = {}) {
+    if (!sessionId) throw new Error('sessionId is required');
+    const query = options.config_profile ? `?config_profile=${encodeURIComponent(options.config_profile)}` : '';
+    const endpoint = `${this.apiVersion}/sessions/${encodeURIComponent(sessionId)}/context${query}`;
+    // Remove config_profile from body if present
+    const { config_profile, ...body } = options;
     return this._makeRequest(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
