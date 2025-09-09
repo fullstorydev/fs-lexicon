@@ -1876,13 +1876,7 @@ class FullstoryConnector extends ConnectorBase {
    * @param {Object} [params.context] - Optional. Context configuration.
    * @param {Object} [params.events] - Optional. Events configuration.
    * @param {Object} [params.cache] - Optional. Cache configuration.
-   * @param {Object} [params.llm] - Optional. LLM configuration. May include:
-   *   @param {string} [params.llm.pre_prompt] - Text to be included in the Generative AI prompt before the session context
-   *   @param {string} [params.llm.post_prompt] - Text to be included in the Generative AI prompt after the session context
-   *   @param {string} [params.llm.output_schema] - Optional JSON Schema to define output (legacy string-based)
-   *   @param {string} [params.llm.model] - LLM model to use (e.g., 'GEMINI_2_FLASH', 'GEMINI_2_FLASH_LITE')
-   *   @param {number} [params.llm.temperature] - LLM temperature (randomness)
-   *   @param {Object} [params.llm.response_schema] - JSON schema for generating structured response (enforced at LLM, highly reliable)
+   * @param {Object} [params.llm] - Optional. LLM configuration.
    * @param {string} [params.name] - Optional. The display name of the profile.
    * @returns {Promise<Object>} Deletion result
    */
