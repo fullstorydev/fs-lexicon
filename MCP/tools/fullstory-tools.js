@@ -231,62 +231,6 @@ const fullstoryTools = [
     }
   },
   {
-    name: 'fullstory_generate_session_context_experimental',
-    description: 'Generate context for a session with experimental media support (FullStory v2)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        session_id: { type: 'string', description: 'The unique identifier for the session (required)' },
-        options: {
-          type: 'object',
-          description: 'Optional configuration for context generation',
-          properties: {
-            config_profile: { type: 'string', description: 'Optional configuration profile to use for context generation' },
-            slice: {
-              type: 'object',
-              description: 'Slicing options for the session',
-              properties: {
-                mode: { type: 'string', enum: ['UNSPECIFIED', 'FIRST', 'LAST', 'TIMESTAMP'], description: 'Slicing mode' },
-                event_limit: { type: 'number', description: 'Limit number of events' },
-                duration_limit_ms: { type: 'number', description: 'Limit session duration in ms' },
-                start_timestamp: { type: 'string', description: 'Start timestamp for slicing (ISO8601)' }
-              }
-            },
-            context: {
-              type: 'object',
-              description: 'Context configuration',
-              properties: {
-                include: { type: 'array', items: { type: 'string' }, description: 'Fields to include in the context' },
-                exclude: { type: 'array', items: { type: 'string' }, description: 'Fields to exclude from the context' }
-              }
-            },
-            events: {
-              type: 'object',
-              description: 'Events configuration',
-              properties: {
-                include_types: { type: 'array', items: { type: 'string' }, description: 'Event types to include' },
-                exclude_types: { type: 'array', items: { type: 'string' }, description: 'Event types to exclude' },
-                trim_to_last_n_selectors: { type: 'number', description: 'Trim events to last N selectors' }
-              }
-            },
-            media: {
-              type: 'object',
-              description: 'Media configuration for screenshots and visual content',
-              properties: {
-                include_screenshots: { type: 'boolean', description: 'Whether to include screenshots in the context' },
-                screenshot_event_types: { type: 'array', items: { type: 'string' }, description: 'Event types to capture screenshots for (e.g., ["element-seen"])' },
-                crop_screenshots_to_selector: { type: 'boolean', description: 'Whether to crop screenshots to the selector element bounds' },
-                full_page_screenshots: { type: 'boolean', description: 'Whether to capture full page screenshots instead of viewport only' }
-              }
-            },
-            cache: { type: 'object', description: 'Cache configuration (object)' }
-          }
-        }
-      },
-      required: ['session_id']
-    }
-  },
-  {
     name: 'fullstory_generate_context',
     description: 'Generate generic context for a session (FullStory v2)',
     inputSchema: {
@@ -646,7 +590,6 @@ const SAFE_TOOL_NAMES = [
   'fullstory_list_session_profiles',
   'fullstory_get_session_events',
   'fullstory_generate_session_context',
-  'fullstory_generate_session_context_experimental',
   'fullstory_generate_session_summary',
   'fullstory_get_session_insights',
   'fullstory_get_user_profile',
@@ -763,15 +706,6 @@ async function fullstoryDispatcher(request) {
     }
     case 'fullstory_generate_session_context': {
       const result = await fullstoryConnector.generateSessionContext(sanitizedArgs.session_id, sanitizedArgs.options || {});
-      return {
-        content: [
-          { type: 'text', text: asPrettyText(result) }
-        ],
-        structuredContent: result
-      };
-    }
-    case 'fullstory_generate_session_context_experimental': {
-      const result = await fullstoryConnector.generateSessionContextExperimental(sanitizedArgs.session_id, sanitizedArgs.options || {});
       return {
         content: [
           { type: 'text', text: asPrettyText(result) }

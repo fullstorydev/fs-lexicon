@@ -1955,49 +1955,6 @@ class FullstoryConnector extends ConnectorBase {
   }
 
   /**
-   * Generate context for a specific session with experimental media support (FullStory v2)
-   *
-   * Generates a context object for a session, including user, session, and event context, with optional configuration.
-   * This experimental version includes media object support for screenshots and visual content.
-   *
-   * @param {string} sessionId - The unique identifier for the session (required).
-   * @param {Object} [options] - Optional configuration for context generation.
-   * @param {string} [options.config_profile] - Optional configuration profile to use for context generation.
-   * @param {Object} [options.slice] - Optional. Slicing options for the session. May include:
-   *   @param {('UNSPECIFIED'|'FIRST'|'LAST'|'TIMESTAMP')} [options.slice.mode] - Slicing mode.
-   *   @param {number} [options.slice.event_limit] - Limit number of events.
-   *   @param {number} [options.slice.duration_limit_ms] - Limit session duration in ms.
-   *   @param {string} [options.slice.start_timestamp] - Start timestamp for slicing (ISO8601).
-   * @param {Object} [options.context] - Optional. Context configuration. May include:
-   *   @param {Array<string>} [options.context.include] - Fields to include in the context.
-   *   @param {Array<string>} [options.context.exclude] - Fields to exclude from the context.
-   * @param {Object} [options.events] - Optional. Events configuration. May include:
-   *   @param {Array<string>} [options.events.include_types] - Event types to include.
-   *   @param {Array<string>} [options.events.exclude_types] - Event types to exclude.
-   *   @param {number} [options.events.trim_to_last_n_selectors] - Trim events to last N selectors.
-   * @param {Object} [options.media] - Optional. Media configuration for screenshots and visual content. May include:
-   *   @param {boolean} [options.media.include_screenshots] - Whether to include screenshots in the context.
-   *   @param {Array<string>} [options.media.screenshot_event_types] - Event types to capture screenshots for (e.g., ["element-seen"]).
-   *   @param {boolean} [options.media.crop_screenshots_to_selector] - Whether to crop screenshots to the selector element bounds.
-   *   @param {boolean} [options.media.full_page_screenshots] - Whether to capture full page screenshots instead of viewport only.
-   * @param {Object} [options.cache] - Optional. Cache configuration (object).
-   * @returns {Promise<Object>} The generated session context object with experimental media support.
-   * @throws {Error} If the API request fails or sessionId is missing/invalid.
-   */
-  async generateSessionContextExperimental(sessionId, options = {}) {
-    if (!sessionId) throw new Error('sessionId is required');
-    const query = options.config_profile ? `?config_profile=${encodeURIComponent(options.config_profile)}` : '';
-    const endpoint = `${this.apiVersion}/sessions/${encodeURIComponent(sessionId)}/context${query}`;
-    // Remove config_profile from body if present
-    const { config_profile, ...body } = options;
-    return this._makeRequest(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      body: Object.keys(body).length ? JSON.stringify(body) : undefined
-    });
-  }
-
-  /**
    * Get events for a specific session
    * @param {string} userId - User identifier
    * @param {string} sessionId - Session identifier
