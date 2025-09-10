@@ -20,6 +20,9 @@ import rateLimiter from '../rateLimiter.js';
 // Import MCP authentication system
 import { getMCPAuth, isAuthEnabled } from './auth/mcpAuth.js';
 
+// Create a global logger for error handling (before main function)
+const globalLogger = new Logger('MCP-Global');
+
 /**
  * Initialize MCP services following the same pattern as main Lexicon
  */
@@ -459,7 +462,7 @@ const isTestEnvironment = process.env.NODE_ENV === 'test' || process.env.JEST_WO
 
 if (isDirectExecution && !isTestEnvironment) {
   main().catch((err) => {
-    mcpLogger.error(`Fatal error during MCP server startup`, {
+    globalLogger.error(`Fatal error during MCP server startup`, {
       error: err.message,
       stack: err.stack
     });
@@ -470,7 +473,7 @@ if (isDirectExecution && !isTestEnvironment) {
 
 
 function handleSignal(signal) {
-  mcpLogger.info(`Received ${signal}. Shutting down gracefully...`, { signal });
+  globalLogger.info(`Received ${signal}. Shutting down gracefully...`, { signal });
   process.exit(0);
 }
 
@@ -480,7 +483,7 @@ function handleSignal(signal) {
 
 
 process.on('uncaughtException', (err) => {
-  mcpLogger.error(`Uncaught exception`, {
+  globalLogger.error(`Uncaught exception`, {
     error: err.message,
     stack: err.stack
   });
@@ -489,7 +492,7 @@ process.on('uncaughtException', (err) => {
 
 
 process.on('unhandledRejection', (reason, promise) => {
-  mcpLogger.error(`Unhandled rejection`, {
+  globalLogger.error(`Unhandled rejection`, {
     reason: reason,
     promise: promise.toString()
   });
