@@ -159,9 +159,10 @@ export class CloudAdapter {
  * Google Cloud Functions/Cloud Run adapter
  */
 export class GCPAdapter extends CloudAdapter {
-  constructor() {
+  constructor(expressApp = null) {
     super();
-    this.app = express();
+    // Use provided app or create a new one
+    this.app = expressApp || express();
     
     // Track whether we're running in Cloud Run or Cloud Functions
     this.isCloudRun = process.env.K_SERVICE !== undefined;
@@ -186,9 +187,10 @@ export class GCPAdapter extends CloudAdapter {
   
   /**
    * Create an instance of GCPAdapter
+   * @param {Express} expressApp - Optional Express app to use instead of creating a new one
    */
-  static async create() {
-    const instance = new GCPAdapter();
+  static async create(expressApp = null) {
+    const instance = new GCPAdapter(expressApp);
     await instance.initialize();
     return instance;
   }
@@ -471,11 +473,12 @@ async function initializeLexicon() {
     await startup.initialize();
     
     // Create appropriate cloud adapter
+    // Pass the main app so routes get added to it directly
     let adapter;
     
     switch (cloud_provider.toUpperCase()) {
       case 'GCP':
-        adapter = await GCPAdapter.create();
+        adapter = await GCPAdapter.create(app);
         break;
       case 'AZURE':
         adapter = await AzureAdapter.create();
@@ -497,7 +500,9 @@ async function initializeLexicon() {
       
       adapter
         .addRoute('/webhook', webhookRouter)
-        .addHealthCheck();        initialization.markInitialized('Webhook Routes');
+        .addHealthCheck();
+      
+      initialization.markInitialized('Webhook Routes');
     } catch (error) {
       initialization.markFailed('Webhook Routes', error);
       throw error;
@@ -507,17 +512,13 @@ async function initializeLexicon() {
     try {
       const deployment = adapter.deploy();
       
-      // Mark the app as initialized
+      // Mark the app as initialized - routes are already on the main app
       app.initialized = true;
       
-      if (deployment.expressApp) {
-        // Copy all routes and middleware from the adapter's app to our main app
-        deployment.expressApp._router.stack.forEach(layer => {
-          app._router.stack.push(layer);
-        });
-        
-        logger.info('Configured Express app for direct handling');
-      }
+      logger.info('Application deployed successfully', {
+        hasExpressApp: !!deployment.expressApp,
+        provider: cloud_provider
+      });
       
       initialization.markInitialized('Deployment');
       
