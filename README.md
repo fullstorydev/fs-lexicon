@@ -6,6 +6,8 @@
 
 </div>
 
+> **Looking for the official FullStory MCP Server?** Find it [here](https://developer.fullstory.com/mcp/introduction/). The FullStory MCP allows any MCP-compatible AI client (Cursor, Claude Desktop, Claude Code, and others) to query your FullStory data, analyze user behavior, and surface insights in natural language without leaving your AI chat client.
+
 
 ## 📦 ES Module Migration - Complete
 
